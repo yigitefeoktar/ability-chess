@@ -7,8 +7,8 @@
     <meta name="description" content="Play standard chess from an unusual, engine-checked opening. Challenge the bot or share a board with a friend.">
     <title>Opening Shuffle</title>
     <link rel="icon" href="./pieces/bN.png" type="image/png">
-    <link rel="stylesheet" href="./styles.css?v=3">
-    <script type="module" src="./game.js?v=3"></script>
+    <link rel="stylesheet" href="./styles.css?v=4">
+    <script type="module" src="./game.js?v=4"></script>
   </head>
   <body>
     <header class="site-header">
@@ -37,8 +37,11 @@
               <option value="3">Hard</option>
             </select>
           </label>
-          <label class="difficulty flip-option">Flip board
-            <input id="flip" type="checkbox">
+          <label class="difficulty"><span id="color-label">Play as</span>
+            <select id="player-color">
+              <option value="w">White</option>
+              <option value="b">Black</option>
+            </select>
           </label>
           <button class="primary" id="shuffle" type="button">Start game <span aria-hidden="true">→</span></button>
           <button class="secondary" id="resume" type="button" hidden>Resume game</button>

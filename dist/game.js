@@ -3,8 +3,8 @@ import { automaticEnding, currentDrawClaim, drawClaims, opposite, replayOpening,
 
 const byId = id => document.getElementById(id);
 const board = byId('board');
-const flipControl = byId('flip');
-const flipPreferenceKey = 'opening-shuffle-flip-board';
+const colorControl = byId('player-color');
+const colorPreferenceKey = 'opening-shuffle-player-color';
 const files = 'abcdefgh';
 const ranks = '87654321';
 const pieceNames = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' };
@@ -16,7 +16,6 @@ let openingMoves;
 let game;
 let round;
 let firstColor;
-let orientation;
 let selected;
 let focusSquare = 'e2';
 let ending;
@@ -62,7 +61,7 @@ function startRound() {
   selected = null;
   ending = null;
   focusSquare = game.moves({ verbose: true })[0]?.from ?? 'e2';
-  orientBoard();
+  orderBoard();
   showScreen('game');
 }
 
@@ -70,19 +69,14 @@ function newOpening() {
   const candidates = openings.filter(candidate => candidate !== opening);
   opening = candidates[Math.floor(Math.random() * candidates.length)] || openings[0];
   round = 1;
-  firstColor = mode === 'bot' || Math.random() < .5 ? 'w' : 'b';
+  firstColor = colorControl.value;
   scores = [0, 0];
   startRound();
 }
 
 function orderBoard() {
   const order = [...squares.values()];
-  board.replaceChildren(...(orientation === 'w' ? order : order.reverse()));
-}
-
-function orientBoard() {
-  orientation = flipControl.checked ? opposite(firstColor) : firstColor;
-  orderBoard();
+  board.replaceChildren(...(firstColor === 'w' ? order : order.reverse()));
 }
 
 function coord(text, type) {
@@ -120,8 +114,8 @@ function renderBoard() {
       image.draggable = !ending && !botTurn() && piece.color === game.turn();
       button.append(image);
     }
-    if (file === (orientation === 'w' ? 'a' : 'h')) button.append(coord(rank, 'rank'));
-    if (rank === (orientation === 'w' ? '1' : '8')) button.append(coord(file, 'file'));
+    if (file === (firstColor === 'w' ? 'a' : 'h')) button.append(coord(rank, 'rank'));
+    if (rank === (firstColor === 'w' ? '1' : '8')) button.append(coord(file, 'file'));
   }
 }
 
@@ -210,7 +204,7 @@ function setStatus() {
 
 function rememberMatch() {
   try {
-    saveMatch(sessionStorage, { opening, game, mode, difficulty, round, firstColor, orientation, scores, ending, screen });
+    saveMatch(sessionStorage, { opening, game, mode, difficulty, round, firstColor, orientation: firstColor, scores, ending, screen });
   } catch {
     // The game remains playable when browser storage is unavailable.
   }
@@ -221,6 +215,7 @@ function renderMenu() {
   byId('local-mode').setAttribute('aria-pressed', setupMode === 'local');
   byId('difficulty-row').hidden = setupMode !== 'bot';
   byId('difficulty').value = setupDifficulty;
+  byId('color-label').textContent = setupMode === 'bot' ? 'Play as' : 'Player 1 color';
   byId('resume').hidden = !game;
   byId('resume').textContent = ending ? 'View results' : 'Resume game';
 }
@@ -264,8 +259,8 @@ function render() {
   const history = game.history({ verbose: true });
   claims = !ending && !botTurn() ? drawClaims(game) : null;
   renderBoard();
-  renderPlayer(byId('top-player'), opposite(orientation), history);
-  renderPlayer(byId('bottom-player'), orientation, history);
+  renderPlayer(byId('top-player'), opposite(firstColor), history);
+  renderPlayer(byId('bottom-player'), firstColor, history);
   renderMoves();
   setStatus();
   byId('round').textContent = 'Game ' + round + ' of 2';
@@ -438,13 +433,9 @@ byId('rematch').onclick = () => {
   firstColor = opposite(firstColor);
   startRound();
 };
-flipControl.onchange = () => {
-  if (game) {
-    orientBoard();
-    rememberMatch();
-  }
+colorControl.onchange = () => {
   try {
-    sessionStorage.setItem(flipPreferenceKey, String(flipControl.checked));
+    sessionStorage.setItem(colorPreferenceKey, colorControl.value);
   } catch {
     // The option still works for the current page.
   }
@@ -503,14 +494,15 @@ byId('confirm-claim').onclick = () => {
 
 let restored;
 try {
-  flipControl.checked = sessionStorage.getItem(flipPreferenceKey) === 'true';
+  const color = sessionStorage.getItem(colorPreferenceKey)
+    ?? (sessionStorage.getItem('opening-shuffle-flip-board') === 'true' ? 'b' : 'w');
+  colorControl.value = color === 'b' ? 'b' : 'w';
   restored = restoreMatch(sessionStorage, openings);
 } catch {
   // Ignore a stale or inaccessible snapshot.
 }
 if (restored) {
-  ({ opening, game, mode, difficulty, round, firstColor, orientation, scores, ending } = restored);
-  flipControl.checked = orientation !== firstColor;
+  ({ opening, game, mode, difficulty, round, firstColor, scores, ending } = restored);
   setupMode = mode;
   setupDifficulty = difficulty;
   openingMoves = opening.moves.split(' ');
