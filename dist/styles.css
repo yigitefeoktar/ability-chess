@@ -4,6 +4,7 @@
 
 :root {
   color-scheme: dark;
+  scrollbar-width: none;
   --background: #171d18;
   --panel: #222a22;
   --well: #192019;
@@ -18,6 +19,8 @@
   color: var(--ink);
   background: var(--background);
 }
+
+:root::-webkit-scrollbar { display: none; }
 
 *, *::before, *::after { box-sizing: border-box; }
 [hidden] { display: none !important; }
