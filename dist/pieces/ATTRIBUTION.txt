@@ -1,0 +1,6 @@
+Chess piece artwork by Colin M. L. Burnett (Cburnett).
+Licensed under Creative Commons Attribution-ShareAlike 3.0 Unported.
+https://creativecommons.org/licenses/by-sa/3.0/
+
+Source SVGs: https://github.com/lichess-org/lila/tree/master/public/piece/cburnett
+These copies were converted to 96 × 96 transparent PNGs.
