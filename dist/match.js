@@ -83,9 +83,9 @@ export function restoreMatch(storage, openings) {
 }
 
 export function saveMatch(storage, match) {
-  const { opening, game, mode, difficulty, round, firstColor, orientation, scores, ending } = match;
+  const { opening, game, mode, difficulty, round, firstColor, orientation, scores, ending, screen } = match;
   const moves = game.history().slice(opening.moves.split(' ').length);
   storage.setItem('opening-shuffle-match-v1', JSON.stringify({
-    opening: opening.moves, moves, mode, difficulty, round, firstColor, orientation, scores, ending
+    opening: opening.moves, moves, mode, difficulty, round, firstColor, orientation, scores, ending, screen
   }));
 }

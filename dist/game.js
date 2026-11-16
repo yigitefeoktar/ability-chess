@@ -1,5 +1,5 @@
 import { openings } from './openings.js';
-import { automaticEnding, currentDrawClaim, drawClaims, opposite, replayOpening, resignation, restoreMatch, saveMatch } from './match.js';
+import { automaticEnding, currentDrawClaim, drawClaims, opposite, replayOpening, resignation, restoreMatch, saveMatch } from './match.js?v=2';
 
 const byId = id => document.getElementById(id);
 const board = byId('board');
@@ -22,7 +22,9 @@ let scores;
 let worker;
 let promotion;
 let claims;
-let nextMode;
+let screen = 'menu';
+let setupMode = mode;
+let setupDifficulty = difficulty;
 
 const squares = new Map();
 for (const rank of ranks) {
@@ -60,8 +62,7 @@ function startRound() {
   orientation = firstColor;
   focusSquare = game.moves({ verbose: true })[0]?.from ?? 'e2';
   orderBoard();
-  render();
-  requestBot();
+  showScreen('game');
 }
 
 function newOpening() {
@@ -179,12 +180,23 @@ function renderMoves() {
     : 'After move ' + openingTurn;
 }
 
+function winnerText(name) {
+  return name === 'You' ? 'You win' : name + ' wins';
+}
+
+function gameResult() {
+  return ending.winner ? winnerText(nameFor(ending.winner)) : 'Draw';
+}
+
+function playerNames() {
+  return mode === 'bot' ? ['You', 'Bot'] : ['Player 1', 'Player 2'];
+}
+
 function setStatus() {
   const turn = game.turn();
-  const winnerName = ending?.winner ? nameFor(ending.winner) : null;
   byId('status').classList.toggle('finished', Boolean(ending));
   byId('status').textContent = ending
-    ? (winnerName ? winnerName + (winnerName === 'You' ? ' win' : ' wins') : 'Draw') + ' · ' + ending.reason
+    ? gameResult() + ' · ' + ending.reason
     : botTurn()
     ? 'Bot is thinking…'
     : (mode === 'bot' ? 'Your move' : nameFor(turn) + ' to move') + (game.isCheck() ? ' · Check' : '');
@@ -192,10 +204,54 @@ function setStatus() {
 
 function rememberMatch() {
   try {
-    saveMatch(sessionStorage, { opening, game, mode, difficulty, round, firstColor, orientation, scores, ending });
+    saveMatch(sessionStorage, { opening, game, mode, difficulty, round, firstColor, orientation, scores, ending, screen });
   } catch {
     // The game remains playable when browser storage is unavailable.
   }
+}
+
+function renderMenu() {
+  byId('bot-mode').setAttribute('aria-pressed', setupMode === 'bot');
+  byId('local-mode').setAttribute('aria-pressed', setupMode === 'local');
+  byId('difficulty-row').hidden = setupMode !== 'bot';
+  byId('difficulty').value = setupDifficulty;
+  byId('resume').hidden = !game;
+  byId('resume').textContent = ending ? 'View results' : 'Resume game';
+}
+
+function renderResults() {
+  const [left, right] = playerNames();
+  byId('results-title').textContent = gameResult();
+  byId('results-reason').textContent = 'Game ' + round + ' of 2 · ' + ending.reason;
+  byId('results-emblem').replaceChildren(...(ending.winner
+    ? [pieceImage(ending.winner, 'k')]
+    : [pieceImage('w', 'k'), pieceImage('b', 'k')]));
+  const matchLeader = scores[0] > scores[1] ? left : right;
+  byId('match-outcome').textContent = round === 1 ? 'Match score'
+    : scores[0] === scores[1] ? 'Match tied' : winnerText(matchLeader) + ' the match';
+  byId('first-name').textContent = left;
+  byId('second-name').textContent = right;
+  byId('first-score').textContent = scores[0];
+  byId('second-score').textContent = scores[1];
+  byId('rematch').hidden = round !== 1;
+  byId('new-opening').hidden = round !== 2;
+}
+
+function showScreen(next, moveFocus = true) {
+  screen = next;
+  if (next !== 'game') stopBot();
+  for (const name of ['menu', 'game', 'results']) byId(name + '-screen').hidden = name !== next;
+  byId('brand').hidden = next === 'game';
+  byId('menu-open').hidden = next !== 'game';
+  if (next === 'menu') renderMenu();
+  else if (next === 'results') renderResults();
+  else render();
+  if (game && next !== 'game') rememberMatch();
+  if (moveFocus) {
+    window.scrollTo(0, 0);
+    byId(next + '-title').focus({ preventScroll: true });
+  }
+  if (next === 'game') requestBot();
 }
 
 function render() {
@@ -206,16 +262,12 @@ function render() {
   renderPlayer(byId('bottom-player'), orientation, history);
   renderMoves();
   setStatus();
-  byId('bot-mode').setAttribute('aria-pressed', mode === 'bot');
-  byId('local-mode').setAttribute('aria-pressed', mode === 'local');
-  byId('difficulty-row').hidden = mode !== 'bot';
-  byId('difficulty').value = difficulty;
   byId('round').textContent = 'Game ' + round + ' of 2';
   byId('resign').hidden = Boolean(ending);
   byId('claim').hidden = !(claims?.current || claims?.byMove.length);
-  byId('rematch').hidden = !ending || round === 2;
+  byId('return-results').hidden = !ending;
   byId('score').hidden = round === 1 && !ending;
-  const [left, right] = mode === 'bot' ? ['You', 'Bot'] : ['Player 1', 'Player 2'];
+  const [left, right] = playerNames();
   byId('score').textContent = `${left} ${scores[0]} · ${scores[1]} ${right}`;
   rememberMatch();
 }
@@ -229,14 +281,18 @@ function finish(result) {
     scores[0] += .5;
     scores[1] += .5;
   }
-  stopBot();
+  if (byId('resign-dialog').open) byId('resign-dialog').close();
+  showScreen('results');
 }
 
 function play(move) {
   game.move(move);
   selected = null;
   const automatic = automaticEnding(game);
-  if (automatic) finish(automatic);
+  if (automatic) {
+    finish(automatic);
+    return;
+  }
   render();
   requestBot();
 }
@@ -313,7 +369,7 @@ function stopBot() {
 }
 
 function requestBot() {
-  if (worker || ending || !botTurn()) return;
+  if (screen !== 'game' || worker || ending || !botTurn()) return;
   const moves = game.moves({ verbose: true });
   const fallback = () => moves.find(move => move.promotion === 'q') ?? moves[0];
   try {
@@ -329,7 +385,6 @@ function requestBot() {
     const claim = choice === 'claim' && currentDrawClaim(game);
     if (claim) {
       finish({ winner: null, reason: claim });
-      render();
       return;
     }
     const move = moves.find(candidate => candidate.lan === choice) ?? fallback();
@@ -340,37 +395,37 @@ function requestBot() {
   worker.postMessage({ moves: game.history(), difficulty });
 }
 
-function restart(next) {
-  mode = next;
+function startFromMenu() {
+  mode = setupMode;
+  difficulty = setupDifficulty;
   newOpening();
 }
 
-function askRestart(next) {
+function askRestart() {
+  if (!game || ending) {
+    startFromMenu();
+    return;
+  }
   const humanMoved = game.history({ verbose: true }).slice(openingMoves.length)
     .some(move => mode === 'local' || move.color === firstColor);
-  if (!ending && (round === 2 || humanMoved)) {
-    nextMode = next;
-    byId('restart-dialog').showModal();
-  } else {
-    restart(next);
-  }
+  if (round === 2 || humanMoved) byId('restart-dialog').showModal();
+  else startFromMenu();
 }
 
-byId('bot-mode').onclick = () => { if (mode !== 'bot') askRestart('bot'); };
-byId('local-mode').onclick = () => { if (mode !== 'local') askRestart('local'); };
-byId('difficulty').onchange = event => {
-  difficulty = Number(event.target.value);
-  rememberMatch();
-  if (worker) {
-    stopBot();
-    requestBot();
-  }
-};
-byId('shuffle').onclick = () => askRestart(mode);
+byId('bot-mode').onclick = () => { setupMode = 'bot'; renderMenu(); };
+byId('local-mode').onclick = () => { setupMode = 'local'; renderMenu(); };
+byId('difficulty').onchange = event => { setupDifficulty = Number(event.target.value); };
+byId('shuffle').onclick = askRestart;
 byId('confirm-restart').onclick = () => {
   byId('restart-dialog').close();
-  restart(nextMode);
+  startFromMenu();
 };
+byId('menu-open').onclick = () => showScreen('menu');
+byId('resume').onclick = () => showScreen(ending ? 'results' : 'game');
+byId('results-menu').onclick = () => showScreen('menu');
+byId('review-board').onclick = () => showScreen('game');
+byId('return-results').onclick = () => showScreen('results');
+byId('new-opening').onclick = newOpening;
 byId('rematch').onclick = () => {
   if (!ending || round !== 1) return;
   round = 2;
@@ -408,7 +463,6 @@ byId('confirm-resign').onclick = () => {
   byId('resign-dialog').close();
   if (!ending) {
     finish(resignation(game, color));
-    render();
   }
 };
 
@@ -433,7 +487,6 @@ byId('confirm-claim').onclick = () => {
   byId('claim-dialog').close();
   if (ending || !reason) return;
   finish({ winner: null, reason });
-  render();
 };
 
 let restored;
@@ -442,11 +495,14 @@ try { restored = restoreMatch(sessionStorage, openings); } catch {
 }
 if (restored) {
   ({ opening, game, mode, difficulty, round, firstColor, orientation, scores, ending } = restored);
+  setupMode = mode;
+  setupDifficulty = difficulty;
   openingMoves = opening.moves.split(' ');
   focusSquare = game.moves({ verbose: true })[0]?.from ?? 'e2';
   orderBoard();
-  render();
-  requestBot();
+  const initialScreen = restored.screen === 'menu' ? 'menu'
+    : ending && restored.screen !== 'game' ? 'results' : 'game';
+  showScreen(initialScreen, false);
 } else {
-  newOpening();
+  showScreen('menu', false);
 }
