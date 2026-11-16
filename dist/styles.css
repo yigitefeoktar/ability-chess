@@ -82,8 +82,9 @@ h1 em { color: var(--gold); font-weight: 400; }
 .square.check { background: #dd937f; box-shadow: inset 0 0 0 3px #983b2c; }
 .square img { display: block; width: 90%; height: 90%; object-fit: contain; user-select: none; filter: drop-shadow(0 2px 1px #23261955); }
 .square:focus-visible { outline: 3px solid #392829; outline-offset: -4px; z-index: 2; }
-.square.target::after { content: ''; position: absolute; width: 24%; aspect-ratio: 1; border-radius: 50%; background: #23341e80; pointer-events: none; }
-.square.capture::after { width: 87%; background: transparent; border: 3px solid #23341e9c; }
+.square.target:not(.capture)::after { content: ''; position: absolute; width: 24%; aspect-ratio: 1; border-radius: 50%; background: #23341e80; pointer-events: none; }
+.square.target.capture { background: #d7aa81; box-shadow: inset 0 0 0 2px #805238; }
+.square.dark.target.capture { background: #bc8d67; }
 .coord { position: absolute; font-size: clamp(8px, 1.25vw, 11px); font-weight: 700; pointer-events: none; }
 .coord.rank { top: 2px; left: 3px; }
 .coord.file { bottom: 1px; right: 3px; }
