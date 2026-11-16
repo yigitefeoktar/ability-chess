@@ -1,4 +1,5 @@
 import { Chess } from './vendor/chess.js';
+import { compulsoryDraw, currentDrawClaim } from './match.js';
 
 const values = { p: 100, n: 320, b: 335, r: 500, q: 925, k: 0 };
 const expired = Symbol('search time expired');
@@ -36,10 +37,13 @@ function search(game, depth, alpha, beta, ply) {
   const moves = game.moves({ verbose: true });
   const inCheck = game.isCheck();
   if (!moves.length) return inCheck ? -30000 + ply : 0;
-  if (game.isInsufficientMaterial() || game.isDrawByFiftyMoves() || game.isThreefoldRepetition()) return 0;
-  if (depth === 0) return evaluate(game);
+  if (compulsoryDraw(game)) return 0;
+  const claim = currentDrawClaim(game);
+  if (depth === 0) return claim ? Math.max(0, evaluate(game)) : evaluate(game);
   moves.sort((a, b) => priority(b) - priority(a));
-  let best = -Infinity;
+  let best = claim ? 0 : -Infinity;
+  alpha = Math.max(alpha, best);
+  if (alpha >= beta) return best;
   for (const move of moves) {
     game.move(move);
     const score = -search(game, depth - 1, -beta, -alpha, ply + 1);
@@ -55,8 +59,10 @@ function choose(history, difficulty) {
   const game = new Chess();
   for (const move of history) game.move(move);
   const moves = game.moves({ verbose: true }).sort((a, b) => priority(b) - priority(a));
-  if (moves.length < 2) return moves[0]?.lan;
+  if (!moves.length) return;
+  const claim = currentDrawClaim(game);
   let best = moves[0];
+  let bestScore = evaluate(game);
   deadline = performance.now() + [0, 180, 460, 850][difficulty];
   nodes = 0;
   try {
@@ -74,11 +80,12 @@ function choose(history, difficulty) {
         }
       }
       best = bestAtDepth;
+      bestScore = highScore;
     }
   } catch (error) {
     if (error !== expired) throw error;
   }
-  return best.lan;
+  return claim && bestScore < 0 ? 'claim' : best.lan;
 }
 
 self.onmessage = event => {

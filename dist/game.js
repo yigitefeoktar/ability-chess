@@ -1,5 +1,5 @@
-import { Chess } from './vendor/chess.js';
 import { openings } from './openings.js';
+import { automaticEnding, currentDrawClaim, drawClaims, opposite, replayOpening, resignation, restoreMatch, saveMatch } from './match.js';
 
 const byId = id => document.getElementById(id);
 const board = byId('board');
@@ -7,7 +7,6 @@ const files = 'abcdefgh';
 const ranks = '87654321';
 const pieceNames = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' };
 const colors = { w: 'White', b: 'Black' };
-const opposite = color => color === 'w' ? 'b' : 'w';
 let mode = 'bot';
 let difficulty = 2;
 let opening;
@@ -18,10 +17,12 @@ let firstColor;
 let orientation;
 let selected;
 let focusSquare = 'e2';
-let result;
+let ending;
 let scores;
 let worker;
 let promotion;
+let claims;
+let nextMode;
 
 const squares = new Map();
 for (const rank of ranks) {
@@ -52,13 +53,12 @@ function botTurn() {
 
 function startRound() {
   stopBot();
-  game = new Chess();
+  game = replayOpening(opening);
   openingMoves = opening.moves.split(' ');
-  for (const move of openingMoves) game.move(move);
   selected = null;
-  result = '';
+  ending = null;
   orientation = firstColor;
-  focusSquare = game.moves({ verbose: true })[0].from;
+  focusSquare = game.moves({ verbose: true })[0]?.from ?? 'e2';
   orderBoard();
   render();
   requestBot();
@@ -110,7 +110,7 @@ function renderBoard() {
     button.replaceChildren();
     if (piece) {
       const image = pieceImage(piece.color, piece.type);
-      image.draggable = !result && !botTurn() && piece.color === game.turn();
+      image.draggable = !ending && !botTurn() && piece.color === game.turn();
       button.append(image);
     }
     if (file === (orientation === 'w' ? 'a' : 'h')) button.append(coord(rank, 'rank'));
@@ -118,7 +118,7 @@ function renderBoard() {
   }
 }
 
-function renderPlayer(element, color) {
+function renderPlayer(element, color, history) {
   const icon = document.createElement('span');
   icon.className = 'player-icon';
   icon.append(pieceImage(color, 'k'));
@@ -128,8 +128,22 @@ function renderPlayer(element, color) {
   const side = document.createElement('span');
   side.className = 'player-color';
   side.textContent = colors[color];
-  element.replaceChildren(icon, name, side);
-  if (!result && game.turn() === color) {
+  const identity = document.createElement('div');
+  identity.className = 'player-identity';
+  identity.append(name, side);
+  element.replaceChildren(icon, identity);
+  const active = !ending && game.turn() === color;
+  element.classList.toggle('active-player', active);
+  const captures = history.filter(move => move.color === color && move.captured);
+  if (captures.length) {
+    const tray = document.createElement('span');
+    tray.className = 'captures';
+    const captured = captures.map(move => move.captured);
+    tray.setAttribute('aria-label', 'Captured: ' + captured.map(type => pieceNames[type]).join(', '));
+    for (const type of captured) tray.append(pieceImage(opposite(color), type));
+    element.append(tray);
+  }
+  if (active) {
     const turn = document.createElement('span');
     turn.className = 'player-turn';
     turn.textContent = botTurn() ? 'Thinking' : 'To move';
@@ -158,7 +172,7 @@ function renderMoves() {
     rows.append(row);
   }
   list.replaceChildren(rows);
-  list.scrollTop = list.scrollHeight;
+  list.scrollTop = history.length > openingMoves.length ? list.scrollHeight : 0;
   const openingTurn = Math.ceil(openingMoves.length / 2);
   byId('opening-length').textContent = openingMoves.length % 2
     ? 'After White’s move ' + openingTurn
@@ -167,30 +181,49 @@ function renderMoves() {
 
 function setStatus() {
   const turn = game.turn();
-  byId('status').textContent = result || (botTurn()
+  const winnerName = ending?.winner ? nameFor(ending.winner) : null;
+  byId('status').classList.toggle('finished', Boolean(ending));
+  byId('status').textContent = ending
+    ? (winnerName ? winnerName + (winnerName === 'You' ? ' win' : ' wins') : 'Draw') + ' · ' + ending.reason
+    : botTurn()
     ? 'Bot is thinking…'
-    : (mode === 'bot' ? 'Your move' : nameFor(turn) + ' to move') + (game.isCheck() ? ' · Check' : ''));
+    : (mode === 'bot' ? 'Your move' : nameFor(turn) + ' to move') + (game.isCheck() ? ' · Check' : '');
+}
+
+function rememberMatch() {
+  try {
+    saveMatch(sessionStorage, { opening, game, mode, difficulty, round, firstColor, orientation, scores, ending });
+  } catch {
+    // The game remains playable when browser storage is unavailable.
+  }
 }
 
 function render() {
+  const history = game.history({ verbose: true });
+  claims = !ending && !botTurn() ? drawClaims(game) : null;
   renderBoard();
-  renderPlayer(byId('top-player'), opposite(orientation));
-  renderPlayer(byId('bottom-player'), orientation);
+  renderPlayer(byId('top-player'), opposite(orientation), history);
+  renderPlayer(byId('bottom-player'), orientation, history);
   renderMoves();
   setStatus();
   byId('bot-mode').setAttribute('aria-pressed', mode === 'bot');
   byId('local-mode').setAttribute('aria-pressed', mode === 'local');
   byId('difficulty-row').hidden = mode !== 'bot';
+  byId('difficulty').value = difficulty;
   byId('round').textContent = 'Game ' + round + ' of 2';
-  byId('resign').hidden = Boolean(result);
-  byId('rematch').hidden = !result || round === 2;
-  byId('score').hidden = round === 1 && !result;
+  byId('resign').hidden = Boolean(ending);
+  byId('claim').hidden = !(claims?.current || claims?.byMove.length);
+  byId('rematch').hidden = !ending || round === 2;
+  byId('score').hidden = round === 1 && !ending;
   const [left, right] = mode === 'bot' ? ['You', 'Bot'] : ['Player 1', 'Player 2'];
   byId('score').textContent = `${left} ${scores[0]} · ${scores[1]} ${right}`;
+  rememberMatch();
 }
 
-function finish(winner, reason) {
-  result = winner ? nameFor(winner) + (nameFor(winner) === 'You' ? ' win' : ' wins') + ' · ' + reason : 'Draw · ' + reason;
+function finish(result) {
+  ending = result;
+  selected = null;
+  const { winner } = result;
   if (winner) scores[winner === firstColor ? 0 : 1]++;
   else {
     scores[0] += .5;
@@ -202,11 +235,8 @@ function finish(winner, reason) {
 function play(move) {
   game.move(move);
   selected = null;
-  if (game.isCheckmate()) finish(opposite(game.turn()), 'Checkmate');
-  else if (game.isStalemate()) finish(null, 'Stalemate');
-  else if (game.isInsufficientMaterial()) finish(null, 'Insufficient material');
-  else if (game.isThreefoldRepetition()) finish(null, 'Threefold repetition');
-  else if (game.isDrawByFiftyMoves()) finish(null, 'Fifty-move rule');
+  const automatic = automaticEnding(game);
+  if (automatic) finish(automatic);
   render();
   requestBot();
 }
@@ -234,7 +264,7 @@ function chooseMove(from, to) {
 
 board.addEventListener('click', event => {
   const square = event.target.closest('.square')?.dataset.square;
-  if (!square || result || botTurn()) return;
+  if (!square || ending || botTurn()) return;
   focusSquare = square;
   if (selected && selected !== square && chooseMove(selected, square)) return;
   selected = selected !== square && game.get(square)?.color === game.turn() ? square : null;
@@ -267,12 +297,12 @@ board.addEventListener('dragstart', event => {
   event.dataTransfer.setData('text/plain', square);
 });
 board.addEventListener('dragover', event => {
-  if (!result && !botTurn() && event.target.closest('.square')) event.preventDefault();
+  if (!ending && !botTurn() && event.target.closest('.square')) event.preventDefault();
 });
 board.addEventListener('drop', event => {
   const to = event.target.closest('.square')?.dataset.square;
   const from = event.dataTransfer.getData('text/plain');
-  if (!to || !squares.has(from) || result || botTurn()) return;
+  if (!to || !squares.has(from) || ending || botTurn()) return;
   event.preventDefault();
   chooseMove(from, to);
 });
@@ -283,7 +313,7 @@ function stopBot() {
 }
 
 function requestBot() {
-  if (worker || result || !botTurn()) return;
+  if (worker || ending || !botTurn()) return;
   const moves = game.moves({ verbose: true });
   const fallback = () => moves.find(move => move.promotion === 'q') ?? moves[0];
   try {
@@ -294,8 +324,14 @@ function requestBot() {
   }
   const pending = worker;
   const commit = choice => {
-    if (worker !== pending || result) return;
+    if (worker !== pending || ending) return;
     stopBot();
+    const claim = choice === 'claim' && currentDrawClaim(game);
+    if (claim) {
+      finish({ winner: null, reason: claim });
+      render();
+      return;
+    }
     const move = moves.find(candidate => candidate.lan === choice) ?? fallback();
     play(move);
   };
@@ -304,24 +340,39 @@ function requestBot() {
   worker.postMessage({ moves: game.history(), difficulty });
 }
 
-function selectMode(next) {
-  if (mode === next) return;
+function restart(next) {
   mode = next;
   newOpening();
 }
 
-byId('bot-mode').onclick = () => selectMode('bot');
-byId('local-mode').onclick = () => selectMode('local');
+function askRestart(next) {
+  const humanMoved = game.history({ verbose: true }).slice(openingMoves.length)
+    .some(move => mode === 'local' || move.color === firstColor);
+  if (!ending && (round === 2 || humanMoved)) {
+    nextMode = next;
+    byId('restart-dialog').showModal();
+  } else {
+    restart(next);
+  }
+}
+
+byId('bot-mode').onclick = () => { if (mode !== 'bot') askRestart('bot'); };
+byId('local-mode').onclick = () => { if (mode !== 'local') askRestart('local'); };
 byId('difficulty').onchange = event => {
   difficulty = Number(event.target.value);
+  rememberMatch();
   if (worker) {
     stopBot();
     requestBot();
   }
 };
-byId('shuffle').onclick = newOpening;
+byId('shuffle').onclick = () => askRestart(mode);
+byId('confirm-restart').onclick = () => {
+  byId('restart-dialog').close();
+  restart(nextMode);
+};
 byId('rematch').onclick = () => {
-  if (!result || round !== 1) return;
+  if (!ending || round !== 1) return;
   round = 2;
   firstColor = opposite(firstColor);
   startRound();
@@ -339,25 +390,63 @@ byId('promotion-options').onclick = event => {
   const type = event.target.closest('button')?.dataset.promotion;
   const move = promotion?.find(choice => choice.promotion === type);
   if (!move) return;
+  promotion = null;
   byId('promotion-dialog').close();
   play(move);
 };
 byId('promotion-dialog').addEventListener('close', () => { promotion = null; });
 byId('resign').onclick = () => {
   const color = mode === 'bot' ? firstColor : game.turn();
-  byId('resign-text').textContent = nameFor(color) === 'You'
-    ? 'You are playing ' + colors[color] + '. Resigning gives the Bot the win.'
-    : nameFor(color) + ' is playing ' + colors[color] + ' and will concede this game.';
+  const outcome = resignation(game, color);
+  byId('resign-text').textContent = outcome.winner
+    ? nameFor(opposite(color)) + (nameFor(opposite(color)) === 'You' ? ' win' : ' wins') + ' if ' + colors[color] + ' resigns.'
+    : colors[color] + ' can resign for a draw because the opponent has only a king.';
   byId('resign-dialog').showModal();
 };
 byId('confirm-resign').onclick = () => {
   const color = mode === 'bot' ? firstColor : game.turn();
   byId('resign-dialog').close();
-  if (!result) {
-    selected = null;
-    finish(opposite(color), 'Resignation');
+  if (!ending) {
+    finish(resignation(game, color));
     render();
   }
 };
 
-newOpening();
+byId('claim').onclick = () => {
+  if (!claims?.current && !claims?.byMove.length) return;
+  byId('claim-choose').hidden = Boolean(claims.current);
+  byId('claim-text').textContent = claims.current
+    ? claims.current + ' applies to this position.'
+    : 'Select a move that would make a draw claim valid.';
+  byId('claim-move').replaceChildren(...claims.byMove.map(({ move, reason }, index) => {
+    const option = document.createElement('option');
+    option.value = index;
+    option.textContent = move.san + ' · ' + reason;
+    return option;
+  }));
+  byId('claim-dialog').showModal();
+};
+
+byId('confirm-claim').onclick = () => {
+  const choice = claims?.byMove[Number(byId('claim-move').value)];
+  const reason = claims?.current ?? (choice ? choice.reason + ' with ' + choice.move.san : null);
+  byId('claim-dialog').close();
+  if (ending || !reason) return;
+  finish({ winner: null, reason });
+  render();
+};
+
+let restored;
+try { restored = restoreMatch(sessionStorage, openings); } catch {
+  // Ignore a stale or inaccessible snapshot.
+}
+if (restored) {
+  ({ opening, game, mode, difficulty, round, firstColor, orientation, scores, ending } = restored);
+  openingMoves = opening.moves.split(' ');
+  focusSquare = game.moves({ verbose: true })[0]?.from ?? 'e2';
+  orderBoard();
+  render();
+  requestBot();
+} else {
+  newOpening();
+}

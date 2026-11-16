@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#f7f5ee">
+    <meta name="theme-color" content="#171d18">
     <meta name="description" content="Play standard chess from an unusual, engine-checked opening. Challenge the bot or share a board with a friend.">
     <title>Opening Shuffle</title>
     <link rel="icon" href="./pieces/bN.png" type="image/png">
@@ -13,17 +13,35 @@
   <body>
     <header class="site-header">
       <div class="header-inner">
-        <div class="brand"><span class="brand-mark"><img src="./pieces/wN.png" alt=""></span> Opening Shuffle</div>
-        <button class="text-button" id="rules-open" type="button">How to play <span aria-hidden="true">↗</span></button>
+        <div class="brand"><span class="brand-mark"><img src="./pieces/bN.png" alt=""></span> Opening Shuffle</div>
+        <button class="text-button" id="rules-open" type="button"><span class="help-icon" aria-hidden="true">?</span> How to play</button>
       </div>
     </header>
     <main class="shell">
       <section class="intro" aria-labelledby="title">
         <h1 id="title">Opening <em>Shuffle</em></h1>
-        <p>Play standard chess from an unexpected opening.</p>
+        <p>Standard chess from an unexpected opening.</p>
       </section>
 
       <div class="play-layout">
+        <section class="card settings" aria-label="Game setup">
+            <h2>Game setup</h2>
+            <div class="segmented" role="group" aria-label="Play mode">
+              <button id="bot-mode" type="button" aria-pressed="true">vs. Bot</button>
+              <button id="local-mode" type="button" aria-pressed="false">Two Players</button>
+            </div>
+            <div class="setup-actions">
+              <label class="difficulty" id="difficulty-row">Bot level
+                <select id="difficulty">
+                  <option value="1">Easy</option>
+                  <option value="2" selected>Medium</option>
+                  <option value="3">Hard</option>
+                </select>
+              </label>
+              <button class="primary" id="shuffle" type="button"><span aria-hidden="true">⤨</span> Shuffle opening</button>
+            </div>
+        </section>
+
         <section class="game-table" aria-label="Chess game">
           <div class="player" id="top-player"></div>
           <div class="board-frame">
@@ -35,37 +53,24 @@
           </div>
         </section>
 
-        <aside class="sidebar" aria-label="Game settings and moves">
-          <section class="card settings">
-            <h2>Play</h2>
-            <div class="segmented" role="group" aria-label="Play mode">
-              <button id="bot-mode" type="button" aria-pressed="true">vs. Bot</button>
-              <button id="local-mode" type="button" aria-pressed="false">Two Players</button>
-            </div>
-            <label class="difficulty" id="difficulty-row">Bot level
-              <select id="difficulty">
-                <option value="1">Easy</option>
-                <option value="2" selected>Medium</option>
-                <option value="3">Hard</option>
-              </select>
-            </label>
-            <button class="primary" id="shuffle" type="button"><span aria-hidden="true">⤨</span> Shuffle opening</button>
-          </section>
-
-          <section class="card game-card">
+        <aside class="card game-card" aria-label="Match and moves">
             <div class="game-heading">
-              <h2>Current game</h2>
+              <h2>Match</h2>
               <span class="round" id="round"></span>
             </div>
             <div class="status" id="status" role="status"></div>
             <div class="moves-heading"><span>Moves</span><span id="opening-length"></span></div>
-            <ol class="moves" id="moves" aria-label="Move history" tabindex="0"></ol>
+            <div class="move-log">
+              <div class="move-columns" aria-hidden="true"><span>#</span><span>White</span><span>Black</span></div>
+              <ol class="moves" id="moves" aria-label="Move history" tabindex="0"></ol>
+            </div>
+            <div class="moves-key"><span></span> Preset opening</div>
             <div class="game-actions">
               <button class="secondary" id="rematch" type="button" hidden>Swap colors &amp; replay</button>
+              <button class="text-button" id="claim" type="button" hidden>Claim draw</button>
               <button class="text-button resign" id="resign" type="button">Resign</button>
             </div>
             <p class="score" id="score" hidden></p>
-          </section>
         </aside>
       </div>
     </main>
@@ -85,6 +90,17 @@
       <div class="dialog-head"><h2 id="resign-title">Resign this game?</h2><button class="icon-button" type="button" aria-label="Cancel resignation" data-close>×</button></div>
       <p id="resign-text"></p>
       <button class="primary" id="confirm-resign" type="button">Resign game</button>
+    </dialog>
+    <dialog id="restart-dialog" aria-labelledby="restart-title">
+      <div class="dialog-head"><h2 id="restart-title">Start a new match?</h2><button class="icon-button" type="button" aria-label="Keep playing" data-close autofocus>×</button></div>
+      <p>Your current match and score will be cleared.</p>
+      <button class="primary" id="confirm-restart" type="button">Start new match</button>
+    </dialog>
+    <dialog id="claim-dialog" aria-labelledby="claim-title">
+      <div class="dialog-head"><h2 id="claim-title">Claim draw</h2><button class="icon-button" type="button" aria-label="Cancel draw claim" data-close>×</button></div>
+      <p id="claim-text"></p>
+      <label id="claim-choose" class="difficulty" hidden>Intended move <select id="claim-move"></select></label>
+      <button class="primary" id="confirm-claim" type="button">Confirm draw</button>
     </dialog>
   </body>
 </html>
