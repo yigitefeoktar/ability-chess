@@ -31,7 +31,7 @@ body {
 }
 button, select { font: inherit; }
 button { cursor: pointer; }
-button:focus-visible, select:focus-visible, .moves:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+button:focus-visible, select:focus-visible, input:focus-visible, .moves:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
 h1, h2, p { margin: 0; }
 .site-header { border-bottom: 1px solid #a3a9922b; background: #171d18ad; }
 .header-inner, .shell { width: min(100% - 48px, calc(var(--board-width) + 371px)); margin-inline: auto; }
@@ -102,8 +102,7 @@ h1 em { color: var(--gold); font-weight: 400; }
 .coord { position: absolute; font-size: clamp(8px, 1.25vw, 11px); font-weight: 700; pointer-events: none; }
 .coord.rank { top: 2px; left: 3px; }
 .coord.file { bottom: 1px; right: 3px; }
-.board-bottom { display: flex; align-items: center; gap: 7px; margin-top: 6px; }
-.board-bottom .player { flex: 1; }
+#bottom-player { margin-top: 6px; }
 .icon-button { display: grid; place-items: center; height: 38px; min-width: 38px; padding: 0 5px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); color: var(--ink); font-size: 21px; line-height: 1; }
 .icon-button:hover, .secondary:hover { background: #364231; }
 .card { min-width: 0; border: 1px solid var(--line); border-radius: 11px; padding: 15px; background: var(--panel); box-shadow: 0 5px 15px #11181032; }
@@ -114,6 +113,8 @@ h1 em { color: var(--gold); font-weight: 400; }
 .segmented button[aria-pressed='true'] { background: #3b4935; border-color: #58654a; color: var(--ink); }
 .difficulty { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; font-weight: 600; color: var(--muted); }
 .difficulty select { min-width: 0; min-height: 34px; padding: 4px 7px; border: 1px solid var(--line); border-radius: 6px; background: var(--well); color: var(--ink); }
+.flip-option { min-height: 34px; cursor: pointer; }
+.flip-option input { width: 18px; height: 18px; margin: 0 5px; accent-color: var(--gold); cursor: pointer; }
 .primary, .secondary { display: inline-flex; align-items: center; justify-content: center; gap: 7px; width: 100%; min-height: 40px; padding: 5px 10px; border-radius: 7px; font-size: 13px; font-weight: 700; }
 .primary { border: 1px solid #f4d3a6; background: var(--gold); color: #241d15; }
 .primary:hover { background: #f8d3a2; }
@@ -178,9 +179,8 @@ dialog select { max-width: 100%; }
   .brand-mark img { width: 21px; }
   .play-layout { gap: 7px; }
   .board-frame { margin-top: 4px; padding: 4px; }
-  .board-bottom { margin-top: 4px; }
+  #bottom-player { margin-top: 4px; }
   .player { min-height: 36px; }
-  .board-bottom .icon-button { height: 36px; min-width: 36px; }
 }
 @media (max-width: 340px) {
   .player-identity { gap: 2px 4px; }

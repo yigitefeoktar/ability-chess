@@ -3,6 +3,8 @@ import { automaticEnding, currentDrawClaim, drawClaims, opposite, replayOpening,
 
 const byId = id => document.getElementById(id);
 const board = byId('board');
+const flipControl = byId('flip');
+const flipPreferenceKey = 'opening-shuffle-flip-board';
 const files = 'abcdefgh';
 const ranks = '87654321';
 const pieceNames = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' };
@@ -59,9 +61,8 @@ function startRound() {
   openingMoves = opening.moves.split(' ');
   selected = null;
   ending = null;
-  orientation = firstColor;
   focusSquare = game.moves({ verbose: true })[0]?.from ?? 'e2';
-  orderBoard();
+  orientBoard();
   showScreen('game');
 }
 
@@ -77,6 +78,11 @@ function newOpening() {
 function orderBoard() {
   const order = [...squares.values()];
   board.replaceChildren(...(orientation === 'w' ? order : order.reverse()));
+}
+
+function orientBoard() {
+  orientation = flipControl.checked ? opposite(firstColor) : firstColor;
+  orderBoard();
 }
 
 function coord(text, type) {
@@ -432,10 +438,16 @@ byId('rematch').onclick = () => {
   firstColor = opposite(firstColor);
   startRound();
 };
-byId('flip').onclick = () => {
-  orientation = opposite(orientation);
-  orderBoard();
-  render();
+flipControl.onchange = () => {
+  if (game) {
+    orientBoard();
+    rememberMatch();
+  }
+  try {
+    sessionStorage.setItem(flipPreferenceKey, String(flipControl.checked));
+  } catch {
+    // The option still works for the current page.
+  }
 };
 byId('rules-open').onclick = () => byId('rules-dialog').showModal();
 for (const button of document.querySelectorAll('[data-close]')) {
@@ -490,11 +502,15 @@ byId('confirm-claim').onclick = () => {
 };
 
 let restored;
-try { restored = restoreMatch(sessionStorage, openings); } catch {
+try {
+  flipControl.checked = sessionStorage.getItem(flipPreferenceKey) === 'true';
+  restored = restoreMatch(sessionStorage, openings);
+} catch {
   // Ignore a stale or inaccessible snapshot.
 }
 if (restored) {
   ({ opening, game, mode, difficulty, round, firstColor, orientation, scores, ending } = restored);
+  flipControl.checked = orientation !== firstColor;
   setupMode = mode;
   setupDifficulty = difficulty;
   openingMoves = opening.moves.split(' ');
