@@ -185,3 +185,10 @@ dialog select { max-width: 100%; }
   .player-name, .player-color { font-size: 11px; }
   .captures img { width: 15px; }
 }
+
+.ability-badges { position: absolute; z-index: 1; top: 0; left: 50%; transform: translateX(-50%); display: flex; justify-content: center; max-width: 94%; padding: 1px 3px; border: 1px solid #8e5d25; border-radius: 5px; background: #f5d49aee; box-shadow: 0 1px 3px #171d1855; pointer-events: none; }
+.square .ability-badges img { width: clamp(10px, 1.7vw, 18px); height: auto; aspect-ratio: 1; filter: none; }
+.ability-key { display: flex; align-items: center; gap: 7px; margin-top: 12px; font-size: 11px; color: var(--muted); }
+.ability-key img { width: 21px; height: 21px; padding: 1px; border: 1px solid #8e5d25; border-radius: 4px; background: #f5d49a; }
+.variant-note { margin-top: 6px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+@media (max-width: 760px) { .square .ability-badges img { width: clamp(10px, 3vw, 17px); } }

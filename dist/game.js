@@ -1,10 +1,11 @@
-import { openings } from './openings.js';
-import { automaticEnding, currentDrawClaim, drawClaims, opposite, replayOpening, resignation, restoreMatch, saveMatch } from './match.js?v=2';
+import { abilityBadges } from './ability-chess.js';
+const openings = [{ moves: '' }];
+import { automaticEnding, currentDrawClaim, drawClaims, opposite, replayOpening, resignation, restoreMatch, saveMatch } from './match.js';
 
 const byId = id => document.getElementById(id);
 const board = byId('board');
 const colorControl = byId('player-color');
-const colorPreferenceKey = 'opening-shuffle-player-color';
+const colorPreferenceKey = 'ability-chess-player-color';
 const files = 'abcdefgh';
 const ranks = '87654321';
 const pieceNames = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' };
@@ -57,7 +58,7 @@ function botTurn() {
 function startRound() {
   stopBot();
   game = replayOpening(opening);
-  openingMoves = opening.moves.split(' ');
+  openingMoves = opening.moves.split(' ').filter(Boolean);
   selected = null;
   ending = null;
   focusSquare = game.moves({ verbose: true })[0]?.from ?? 'e2';
@@ -106,13 +107,26 @@ function renderBoard() {
     button.classList.toggle('target', Boolean(target));
     button.classList.toggle('capture', Boolean(target?.captured));
     button.classList.toggle('check', inCheck && piece?.type === 'k' && piece.color === game.turn());
-    button.setAttribute('aria-label', square + (piece ? ', ' + colors[piece.color] + ' ' + pieceNames[piece.type] : ', empty') + (target ? ', legal destination' : ''));
+    const badges = piece ? abilityBadges(piece) : [];
+    const extraLabel = badges.length ? ', with ' + badges.map(type => pieceNames[type] + ' movement').join(', ') : '';
+    button.setAttribute('aria-label', square + (piece ? ', ' + colors[piece.color] + ' ' + pieceNames[piece.type] + extraLabel : ', empty') + (target ? ', legal destination' : ''));
     button.tabIndex = focusSquare === square ? 0 : -1;
     button.replaceChildren();
     if (piece) {
       const image = pieceImage(piece.color, piece.type);
       image.draggable = !ending && !botTurn() && piece.color === game.turn();
       button.append(image);
+      if (badges.length) {
+        const overlay = document.createElement('span');
+        overlay.className = 'ability-badges';
+        overlay.setAttribute('aria-hidden', 'true');
+        for (const type of badges) {
+          const badge = pieceImage(piece.color, type);
+          badge.draggable = false;
+          overlay.append(badge);
+        }
+        button.append(overlay);
+      }
     }
     if (file === (firstColor === 'w' ? 'a' : 'h')) button.append(coord(rank, 'rank'));
     if (rank === (firstColor === 'w' ? '1' : '8')) button.append(coord(file, 'file'));
@@ -174,10 +188,7 @@ function renderMoves() {
   }
   list.replaceChildren(rows);
   list.scrollTop = history.length > openingMoves.length ? list.scrollHeight : 0;
-  const openingTurn = Math.ceil(openingMoves.length / 2);
-  byId('opening-length').textContent = openingMoves.length % 2
-    ? 'After White’s move ' + openingTurn
-    : 'After move ' + openingTurn;
+  byId('opening-length').textContent = history.length ? Math.ceil(history.length / 2) + ' played' : 'Starting position';
 }
 
 function winnerText(name) {
@@ -393,7 +404,7 @@ function requestBot() {
   };
   worker.onmessage = event => commit(event.data);
   worker.onerror = () => commit(null);
-  worker.postMessage({ moves: game.history(), difficulty });
+  worker.postMessage({ moves: game.history({ verbose: true }).map(move => move.lan), difficulty });
 }
 
 function startFromMenu() {
@@ -505,7 +516,7 @@ if (restored) {
   ({ opening, game, mode, difficulty, round, firstColor, scores, ending } = restored);
   setupMode = mode;
   setupDifficulty = difficulty;
-  openingMoves = opening.moves.split(' ');
+  openingMoves = opening.moves.split(' ').filter(Boolean);
   focusSquare = game.moves({ verbose: true })[0]?.from ?? 'e2';
   orderBoard();
   const initialScreen = restored.screen === 'menu' ? 'menu'

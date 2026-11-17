@@ -1,11 +1,15 @@
-# Opening Shuffle
+# Ability Chess
 
-Play standard chess from an engine-screened opening against a bot or another person on the same device. After the first game, replay the identical position with the colors swapped. Shuffle draws a different opening and starts a new match.
+A chess variant based on [Opening Shuffle](https://github.com/yigitefeoktar/opening-shuffle). Every game starts from the standard chess position. Capture a piece to inherit all movement abilities it has, including inherited abilities. Small piece icons above the original piece show its additional movement. The king never gains abilities.
 
-Serve the static app from the project directory with `python -m http.server 8765 --bind 127.0.0.1 --directory dist`, then open http://127.0.0.1:8765. The app uses no server-side game logic.
+Movement is combined without duplicates: queen movement covers bishop and rook movement, and already includes all ordinary pawn moves. Only knight movement jumps over blockers. Inherited pawn movement follows the moving side’s direction: one square forward into an empty square or one square diagonally forward to capture.
 
-In-progress matches survive a reload of the same browser tab. Run `node --test tools/verify-game.mjs` to check the opening pool, match recovery, draw rules, special moves, and all three bot levels.
+All other rules remain standard. Only pawns can double-step, capture en passant, and promote; those special rules do not transfer to other pieces. Enhanced pawns still promote on reaching their final rank and retain inherited movement. Castling is limited to the original king and rooks, subject to normal movement and check restrictions. Check, checkmate, stalemate, repetition, and move-count draw rules account for inherited abilities.
 
-The opening pool was generated with Stockfish 19. The generator samples legal, capture-free lines from the standard starting board and checks the resulting position and the position after Stockfish's top continuation. The best line at each check must stay close to even, and each side needs at least three viable moves at its check. The engine scores are estimates.
+Play against one of three bot levels or a friend on the same device. A match has two games with colors swapped. In-progress games, including acquired abilities, survive reloads in the same browser tab.
 
-To regenerate the pool, run `node tools/generate-openings.mjs path/to/stockfish`. Set `OPENING_COUNT` to change the target pool size.
+The app is buildless static HTML, CSS, and JavaScript in `dist/`. Serve with `python -m http.server 8765 --bind 127.0.0.1 --directory dist`, then open http://127.0.0.1:8765.
+
+Run `node --test tools/verify-game.mjs tools/verify-abilities.mjs` to check the original chess rules, inherited movement, special moves, bot behavior, and recovery. The original opening pool and generator are retained as base-project resources; the game always starts from the normal starting position.
+
+`dist/ability-chess.js` extends the vendored chess.js engine without changing vendor code. Piece and engine licenses remain alongside their respective assets.

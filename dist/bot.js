@@ -1,4 +1,4 @@
-import { Chess } from './vendor/chess.js';
+import { Chess, movementAbilities } from './ability-chess.js';
 import { compulsoryDraw, currentDrawClaim } from './match.js';
 
 const values = { p: 100, n: 320, b: 335, r: 500, q: 925, k: 0 };
@@ -20,7 +20,7 @@ function evaluate(game) {
       if (piece.type === 'n') position = center * 13 + (progress > 0 ? 12 : 0);
       if (piece.type === 'b') position = center * 8 + (progress > 0 ? 14 : 0);
       if (piece.type === 'k') position = (file === 6 || file === 2 ? 25 : 0) - progress * 12;
-      total += (piece.color === game.turn() ? 1 : -1) * (values[piece.type] + position);
+      total += (piece.color === game.turn() ? 1 : -1) * (values[piece.type] + (piece.abilities?.length ? movementAbilities(piece).reduce((sum, type) => sum + values[type], 0) - values[piece.type] : 0) + position);
     }
   }
   return total;
@@ -46,8 +46,9 @@ function search(game, depth, alpha, beta, ply) {
   if (alpha >= beta) return best;
   for (const move of moves) {
     game.move(move);
-    const score = -search(game, depth - 1, -beta, -alpha, ply + 1);
-    game.undo();
+    let score;
+    try { score = -search(game, depth - 1, -beta, -alpha, ply + 1); }
+    finally { game.undo(); }
     best = Math.max(best, score);
     alpha = Math.max(alpha, score);
     if (alpha >= beta) break;
@@ -72,8 +73,9 @@ function choose(history, difficulty) {
       const ordered = [best, ...moves.filter(move => move !== best)];
       for (const move of ordered) {
         game.move(move);
-        const score = -search(game, depth - 1, -Infinity, -highScore, 1);
-        game.undo();
+        let score;
+        try { score = -search(game, depth - 1, -Infinity, -highScore, 1); }
+        finally { game.undo(); }
         if (score > highScore) {
           highScore = score;
           bestAtDepth = move;

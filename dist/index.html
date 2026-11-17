@@ -4,16 +4,16 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#171d18">
-    <meta name="description" content="Play standard chess from an unusual, engine-checked opening. Challenge the bot or share a board with a friend.">
-    <title>Opening Shuffle</title>
+    <meta name="description" content="Chess from the classic starting position, with movement abilities inherited on capture. Play against a bot or a friend.">
+    <title>Ability Chess</title>
     <link rel="icon" href="./pieces/bN.png" type="image/png">
-    <link rel="stylesheet" href="./styles.css?v=4">
-    <script type="module" src="./game.js?v=4"></script>
+    <link rel="stylesheet" href="./styles.css?v=5">
+    <script type="module" src="./game.js?v=5"></script>
   </head>
   <body>
     <header class="site-header">
       <div class="header-inner">
-        <div class="brand" id="brand"><span class="brand-mark"><img src="./pieces/bN.png" alt=""></span> Opening Shuffle</div>
+        <div class="brand" id="brand"><span class="brand-mark"><img src="./pieces/bN.png" alt=""></span> Ability Chess</div>
         <button class="text-button" id="menu-open" type="button" hidden><span aria-hidden="true">←</span> Main menu</button>
         <button class="text-button" id="rules-open" type="button"><span class="help-icon" aria-hidden="true">?</span> How to play</button>
       </div>
@@ -22,8 +22,8 @@
       <section class="center-screen" id="menu-screen" aria-labelledby="menu-title">
         <div class="screen-intro">
           <div class="screen-emblem"><img src="./pieces/bN.png" alt=""></div>
-          <h1 id="menu-title" tabindex="-1">Opening <em>Shuffle</em></h1>
-          <p>Standard chess from an unexpected opening.</p>
+          <h1 id="menu-title" tabindex="-1">Ability <em>Chess</em></h1>
+          <p>Capture a piece. Make its moves your own.</p>
         </div>
         <div class="card menu-card">
           <div class="segmented" role="group" aria-label="Play mode">
@@ -69,7 +69,8 @@
               <div class="move-columns" aria-hidden="true"><span>#</span><span>White</span><span>Black</span></div>
               <ol class="moves" id="moves" aria-label="Move history" tabindex="0"></ol>
             </div>
-            <div class="moves-key"><span></span> Preset opening</div>
+            <div class="ability-key"><img src="./pieces/wN.png" alt=""> Small pieces show inherited moves</div>
+            <p class="variant-note">Capture to inherit movement. Kings stay kings.</p>
             <div class="game-actions">
               <button class="secondary" id="return-results" type="button" hidden>Back to results</button>
               <button class="text-button" id="claim" type="button" hidden>Claim draw</button>
@@ -93,7 +94,7 @@
             <div><span id="second-score"></span><span id="second-name"></span></div>
           </div>
           <button class="primary" id="rematch" type="button" hidden>Swap colors &amp; replay</button>
-          <button class="primary" id="new-opening" type="button" hidden>Play a new opening</button>
+          <button class="primary" id="new-opening" type="button" hidden>Start a new match</button>
           <div class="results-actions">
             <button class="text-button" id="review-board" type="button">Review board</button>
             <button class="text-button" id="results-menu" type="button">Main menu</button>
@@ -104,9 +105,11 @@
 
     <dialog id="rules-dialog" aria-labelledby="rules-title">
       <div class="dialog-head"><h2 id="rules-title">How to play</h2><button class="icon-button" type="button" aria-label="Close instructions" data-close>×</button></div>
-      <p>Each game starts after 4–6 moves per side have already been played. The shaded entries in the move list show how the board got there.</p>
+      <p>Every game begins in the normal chess starting position. When a piece captures, it inherits the captured piece’s movement abilities, including any that piece had already gained. Duplicate movement abilities are added only once.</p>
       <p>Pick a piece and then its destination. You can also drag a piece. Use the arrow keys to navigate the board and Enter to select a square.</p>
-      <p>Stockfish checks the opening positions for a small advantage at most and several viable continuations. Finish the game to replay the same opening with the colors swapped.</p>
+      <p>Small piece icons above a piece show its extra movement abilities. Only knight movement can jump over pieces. The king never gains abilities, and check and checkmate still apply.</p>
+      <p>All other chess rules apply. Only original pawns can double-step, capture en passant, or promote. Inherited pawn movement is a forward step or a diagonal capture in the moving side’s direction. Castling is still only for kings and original rooks. Promoting a pawn keeps its inherited abilities.</p>
+      <p>Play the bot or share a board with a friend. A match has two games, with colors swapped for the second game.</p>
       <p class="credits"><a href="./pieces/ATTRIBUTION.txt">Chess piece credits</a></p>
     </dialog>
     <dialog id="promotion-dialog" aria-labelledby="promotion-title">
