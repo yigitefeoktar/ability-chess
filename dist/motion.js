@@ -1,5 +1,3 @@
-export const CHECKMATE_PAUSE_MS = 3000;
-
 export function motionPaths(move) {
   const paths = [{ from: move.from, to: move.to }];
   const rank = move.from[1];
@@ -52,7 +50,7 @@ export function createMoveAnimator(squares, reducedMotion = () => matchMedia('(p
         squares.get(capture).append(victim);
         victim.classList.add('motion-victim');
         cleanup.push(() => victim.remove());
-        animate(victim, [{ opacity: 1 }, { opacity: 0 }], { duration: 240, fill: 'forwards' });
+        animate(victim, [{ opacity: 1 }, { opacity: 0 }], { duration: 140, fill: 'forwards' });
       }
       for (const { from, to } of motionPaths(move)) {
         const source = before.get(from);
@@ -69,7 +67,7 @@ export function createMoveAnimator(squares, reducedMotion = () => matchMedia('(p
         animate(visual, [
           { transform: `translate(${source.rect.left - rect.left}px, ${source.rect.top - rect.top}px)` },
           { transform: 'translate(0, 0)' },
-        ], { duration: 340, easing: 'cubic-bezier(.25,.65,.3,1)', fill: 'both' });
+        ], { duration: 180, easing: 'cubic-bezier(.25,.65,.3,1)', fill: 'both' });
       }
       await Promise.all(pending);
     } finally {
@@ -79,26 +77,4 @@ export function createMoveAnimator(squares, reducedMotion = () => matchMedia('(p
     }
   }
   return { snapshot, place, play, cancel };
-}
-
-// One cancellable results transition; leaving the board or choosing to keep
-// reviewing invalidates it, so an old timer cannot interrupt a new game.
-export function createResultsPause({ schedule = setTimeout, clear = clearTimeout } = {}) {
-  let timer;
-  let generation = 0;
-  function cancel() {
-    generation++;
-    if (timer !== undefined) clear(timer);
-    timer = undefined;
-  }
-  function start(callback) {
-    cancel();
-    const current = generation;
-    timer = schedule(() => {
-      if (current !== generation) return;
-      timer = undefined;
-      callback();
-    }, CHECKMATE_PAUSE_MS);
-  }
-  return { start, cancel };
 }

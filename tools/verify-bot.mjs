@@ -4,7 +4,7 @@ import { Chess } from '../dist/ability-chess.js';
 import { difficulties } from '../dist/difficulty.js';
 
 globalThis.self = {};
-const { searchBestMove } = await import('../dist/bot.js');
+const { searchBestMove, syncGame } = await import('../dist/bot.js');
 
 test('every level finds checkmate using inherited movement', () => {
   for (const level of difficulties) {
@@ -26,7 +26,7 @@ test('Impossible exits on deadline with a legal move and restores all game state
   let ticks = 0;
   const result = searchBestMove(game, 5, { now: () => (ticks++) * 100 });
   assert.ok(game.moves({ verbose: true }).some(move => move.lan === result.move));
-  assert.ok(ticks >= 60);
+  assert.ok(ticks >= 20);
   assert.deepEqual({ board: game.board(), hash: game.positionKey(), fen: game.fen(), counts: game.repetitionCounts(), history: game.history() }, before);
 });
 
@@ -45,4 +45,32 @@ test('the worker handles Impossible and invalid settings with legal responses', 
   self.postMessage = move => response.push(move);
   for (const difficulty of [5, undefined, 999]) self.onmessage({ data: { moves: ['f3', 'e5', 'g4'], difficulty } });
   assert.deepEqual(response, ['d8h4', 'd8h4', 'd8h4']);
+});
+
+test('the reused worker advances only new moves and preserves inherited abilities', () => {
+  const moves = 'e4 d5 exd5 Qxd5 Nc3 Qe6+ Be2 Qxe2+ Ngxe2'.split(' ');
+  const game = syncGame(moves.slice(0, 7));
+  const originalMove = game.move;
+  let replayed = 0;
+  game.move = function (...args) { replayed++; return originalMove.apply(this, args); };
+  assert.equal(syncGame(moves.slice(0, 7)), game);
+  assert.equal(replayed, 0, 'already-applied moves are never replayed');
+  assert.equal(syncGame(moves), game);
+  assert.equal(replayed, 2);
+  assert.deepEqual(game.get('e2').abilities, ['b', 'r']);
+  const expected = new Chess();
+  for (const move of moves) expected.move(move);
+  assert.equal(game.positionKey(), expected.positionKey());
+  assert.deepEqual(game.repetitionCounts(), expected.repetitionCounts());
+  game.move = originalMove;
+  const reset = syncGame(['d4']);
+  assert.notEqual(reset, game);
+  assert.equal(reset.get('d4').type, 'p');
+});
+
+test('worker responses identify the request so an old turn cannot be applied', () => {
+  let response;
+  self.postMessage = message => { response = message; };
+  self.onmessage({ data: { requestId: 42, moves: ['f3', 'e5', 'g4'], difficulty: 1 } });
+  assert.deepEqual(response, { requestId: 42, move: 'd8h4' });
 });

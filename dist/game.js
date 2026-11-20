@@ -1,4 +1,5 @@
-import { createMoveAnimator, createResultsPause } from './motion.js';
+import { createMoveAnimator } from './motion.js';
+import { legalMoveChoices } from './move-choices.js';
 import { difficultyFor } from './difficulty.js';
 import { Chess, abilityBadges } from './ability-chess.js';
 import { pieceImage, updateSquarePiece } from './piece-view.js';
@@ -14,11 +15,15 @@ const colors = { w: 'White', b: 'Black' };
 let mode = 'bot';
 let difficulty = 2;
 let game;
+let history = [];
 let firstColor;
 let selected;
 let focusSquare = 'e2';
 let ending;
 let worker;
+let botRequest;
+let queuedBotReply;
+let requestSequence = 0;
 let promotion;
 let claims;
 let screen = 'menu';
@@ -26,8 +31,6 @@ let setupMode = mode;
 let setupDifficulty = difficulty;
 let animating = false;
 let moveSequence = 0;
-let reviewPinned = false;
-const resultsPause = createResultsPause();
 
 const squares = new Map();
 for (const rank of ranks) {
@@ -54,14 +57,15 @@ function botTurn() {
 function newGame() {
   stopBot();
   cancelPresentation();
-  reviewPinned = false;
   mode = setupMode;
   difficulty = setupDifficulty;
   firstColor = colorControl.value;
   game = new Chess();
+  history = [];
   selected = null;
   ending = null;
-  focusSquare = game.moves({ verbose: true })[0]?.from ?? 'e2';
+  focusSquare = 'e2';
+  if (mode === 'bot') ensureBot();
   orderBoard();
   showScreen('game');
 }
@@ -80,9 +84,8 @@ function coord(text, type) {
 }
 
 function renderBoard() {
-  const legal = selected ? game.moves({ square: selected, verbose: true }) : [];
+  const legal = selected ? legalMoveChoices(game, selected) : [];
   const targets = new Map(legal.map(move => [move.to, move]));
-  const history = game.history({ verbose: true });
   const lastMove = history.at(-1);
   const inCheck = game.isCheck();
   const attackers = matingAttackers();
@@ -152,7 +155,6 @@ function renderPlayer(element, color, history) {
 }
 
 function renderMoves() {
-  const history = game.history();
   const list = byId('moves');
   const rows = document.createDocumentFragment();
   for (let i = 0; i < history.length; i += 2) {
@@ -164,7 +166,7 @@ function renderMoves() {
     row.append(number);
     for (const index of [i, i + 1]) {
       const cell = document.createElement('span');
-      cell.textContent = history[index] ?? '';
+      cell.textContent = history[index]?.san ?? '';
       if (index === history.length - 1) cell.className = 'move-latest';
       row.append(cell);
     }
@@ -216,7 +218,6 @@ function renderResults() {
 function cancelPresentation() {
   moveSequence++;
   moveAnimator.cancel();
-  resultsPause.cancel();
   animating = false;
 }
 
@@ -238,7 +239,6 @@ function showScreen(next, moveFocus = true) {
 }
 
 function render() {
-  const history = game.history({ verbose: true });
   claims = !animating && !ending && !botTurn() ? drawClaims(game) : null;
   renderBoard();
   renderPlayer(byId('top-player'), opposite(firstColor), history);
@@ -250,7 +250,6 @@ function render() {
   byId('claim').hidden = !(claims?.current || claims?.byMove.length);
   byId('return-results').hidden = !ending;
   byId('return-results').textContent = ending?.reason === 'Checkmate' ? 'View results' : 'Back to results';
-  byId('keep-reviewing').hidden = ending?.reason !== 'Checkmate' || reviewPinned;
   renderCheckmate();
 }
 
@@ -268,9 +267,7 @@ function renderCheckmate() {
   byId('checkmate-detail').textContent = attackers.length
     ? 'The ' + attackers.join(' and ') + ' ' + (attackers.length > 1 ? 'check' : 'checks') + ' the king. No legal move can remove the check.'
     : 'The king is in check, and no legal move can remove the check.';
-  byId('checkmate-pause').textContent = reviewPinned
-    ? 'Take your time. Choose View results when you’re ready.'
-    : 'Results will appear shortly. Choose Keep reviewing to stay here.';
+
 }
 
 function finish(result, onBoard = false) {
@@ -287,6 +284,7 @@ async function play(move) {
   if (animating || ending || screen !== 'game') return;
   const before = moveAnimator.snapshot();
   const moved = game.move(move);
+  history.push(moved);
   const sequence = ++moveSequence;
   selected = null;
   animating = true;
@@ -294,6 +292,8 @@ async function play(move) {
   const automatic = automaticEnding(game);
   if (automatic) finish(automatic, true);
   else render();
+  // Let the AI think while the player's piece is still sliding.
+  if (!automatic) requestBot();
   try {
     await moveAnimator.play(moved, before);
   } finally {
@@ -302,17 +302,16 @@ async function play(move) {
   if (sequence !== moveSequence || screen !== 'game') return;
   render();
   if (automatic) {
-    if (automatic.reason === 'Checkmate') {
-      if (!reviewPinned) resultsPause.start(() => showScreen('results'));
-    } else showScreen('results');
+    showScreen('results');
     return;
   }
+  flushBotReply();
   requestBot();
 }
 
 function chooseMove(from, to) {
   if (animating || ending || screen !== 'game') return false;
-  const choices = game.moves({ square: from, verbose: true }).filter(move => move.to === to);
+  const choices = legalMoveChoices(game, from).filter(move => move.to === to);
   if (!choices.length) return false;
   if (choices.length === 1) {
     play(choices[0]);
@@ -380,37 +379,73 @@ board.addEventListener('drop', event => {
 function stopBot() {
   worker?.terminate();
   worker = null;
+  botRequest = null;
+  queuedBotReply = null;
+}
+
+function ensureBot() {
+  if (worker) return worker;
+  let instance;
+  try {
+    instance = new Worker(new URL('./bot.js?v=9', import.meta.url), { type: 'module' });
+  } catch {
+    return null;
+  }
+  worker = instance;
+  instance.onmessage = event => {
+    const request = botRequest;
+    if (!request || request.worker !== instance || event.data?.requestId !== request.id) return;
+    queuedBotReply = { request, choice: event.data.move };
+    flushBotReply();
+  };
+  instance.onerror = () => {
+    if (worker !== instance) return;
+    instance.terminate();
+    worker = null;
+    if (botRequest?.worker === instance) {
+      queuedBotReply = { request: botRequest, choice: null };
+      flushBotReply();
+    }
+  };
+  return instance;
+}
+
+function flushBotReply() {
+  if (!queuedBotReply || animating || screen !== 'game' || ending) return;
+  const { request, choice } = queuedBotReply;
+  queuedBotReply = null;
+  if (request !== botRequest || request.position !== game.positionKey() || !botTurn()) return;
+  botRequest = null;
+  const claim = choice === 'claim' && currentDrawClaim(game);
+  if (claim) {
+    finish({ winner: null, reason: claim });
+    return;
+  }
+  const moves = legalMoveChoices(game);
+  const move = moves.find(candidate => candidate.lan === choice)
+    ?? moves.find(candidate => candidate.promotion === 'q') ?? moves[0];
+  if (move) play(move);
 }
 
 function requestBot() {
-  if (screen !== 'game' || animating || worker || ending || !botTurn()) return;
-  const moves = game.moves({ verbose: true });
-  const fallback = () => moves.find(move => move.promotion === 'q') ?? moves[0];
-  try {
-    worker = new Worker(new URL('./bot.js?v=6', import.meta.url), { type: 'module' });
-  } catch {
-    play(fallback());
+  if (screen !== 'game' || botRequest || ending || !botTurn()) return;
+  const instance = ensureBot();
+  const request = { id: ++requestSequence, worker: instance, position: game.positionKey() };
+  botRequest = request;
+  if (!instance) {
+    queuedBotReply = { request, choice: null };
+    flushBotReply();
     return;
   }
-  const pending = worker;
-  const commit = choice => {
-    if (worker !== pending || ending) return;
-    stopBot();
-    const claim = choice === 'claim' && currentDrawClaim(game);
-    if (claim) {
-      finish({ winner: null, reason: claim });
-      return;
-    }
-    const move = moves.find(candidate => candidate.lan === choice) ?? fallback();
-    play(move);
-  };
-  worker.onmessage = event => commit(event.data);
-  worker.onerror = () => commit(null);
-  worker.postMessage({ moves: game.history({ verbose: true }).map(move => move.lan), difficulty });
+  try {
+    instance.postMessage({ requestId: request.id, moves: history.map(move => move.lan), difficulty });
+  } catch {
+    instance.onerror();
+  }
 }
 
 function askRestart() {
-  if (game && !ending && game.history().length) byId('restart-dialog').showModal();
+  if (game && !ending && history.length) byId('restart-dialog').showModal();
   else newGame();
 }
 
@@ -425,14 +460,8 @@ byId('confirm-restart').onclick = () => {
 byId('menu-open').onclick = () => showScreen('menu');
 byId('resume').onclick = () => showScreen(ending ? 'results' : 'game');
 byId('results-menu').onclick = () => showScreen('menu');
-byId('review-board').onclick = () => { reviewPinned = true; showScreen('game'); };
+byId('review-board').onclick = () => showScreen('game');
 byId('return-results').onclick = () => showScreen('results');
-byId('keep-reviewing').onclick = () => {
-  reviewPinned = true;
-  resultsPause.cancel();
-  renderCheckmate();
-  byId('keep-reviewing').hidden = true;
-};
 byId('new-game').onclick = newGame;
 byId('rules-open').onclick = () => byId('rules-dialog').showModal();
 for (const button of document.querySelectorAll('[data-close]')) {

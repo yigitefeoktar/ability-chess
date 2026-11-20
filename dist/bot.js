@@ -164,9 +164,24 @@ export function searchBestMove(game, difficulty, { now = () => performance.now()
   return { move: claim && bestScore < 0 ? 'claim' : lan(best), depth: completedDepth, nodes, score: bestScore };
 }
 
+// A worker lives for one game. Advance its board by the new moves instead of
+// reconstructing and replaying the whole game on every turn.
+let currentGame = new Chess();
+let appliedMoves = [];
+export function syncGame(moves) {
+  if (appliedMoves.length > moves.length || !appliedMoves.every((move, index) => move === moves[index])) {
+    currentGame = new Chess();
+    appliedMoves = [];
+  }
+  for (const move of moves.slice(appliedMoves.length)) {
+    currentGame.move(move);
+    appliedMoves.push(move);
+  }
+  return currentGame;
+}
+
 self.onmessage = event => {
-  const { moves, difficulty } = event.data;
-  const game = new Chess();
-  for (const move of moves) game.move(move);
-  self.postMessage(searchBestMove(game, difficulty).move);
+  const { moves, difficulty, requestId } = event.data;
+  const move = searchBestMove(syncGame(moves), difficulty).move;
+  self.postMessage(requestId === undefined ? move : { requestId, move });
 };

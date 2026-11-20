@@ -199,7 +199,6 @@ dialog select { max-width: 100%; }
 .checkmate-explanation { margin-top: 12px; padding: 12px; border: 1px solid #a16c4e; border-radius: 7px; background: #493326; }
 .checkmate-explanation h3 { margin: 0 0 6px; color: var(--gold); font-size: 16px; }
 .checkmate-explanation p { font-size: 14px; line-height: 1.5; }
-#checkmate-pause { margin-top: 8px; color: var(--muted); }
 .game-actions { flex-wrap: wrap; }
 button:disabled { cursor: default; opacity: .55; }
 

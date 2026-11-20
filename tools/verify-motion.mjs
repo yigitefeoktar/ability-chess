@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { motionPaths, capturedSquare, createResultsPause, CHECKMATE_PAUSE_MS } from '../dist/motion.js';
+import { motionPaths, capturedSquare } from '../dist/motion.js';
 import { Chess } from '../dist/ability-chess.js';
 
 test('castling animates both pieces for either color and either side', () => {
@@ -19,27 +19,6 @@ test('capture visuals locate the victim for normal and en passant captures', () 
   assert.equal(capturedSquare({ from: 'd4', to: 'e3', flags: 'e', captured: 'p' }), 'e4');
   assert.equal(capturedSquare({ from: 'c3', to: 'd5', flags: 'c', captured: 'n' }), 'd5');
   assert.equal(capturedSquare({ from: 'e2', to: 'e4', flags: 'b' }), null);
-});
-
-test('results wait three seconds and stale callbacks cannot interrupt another screen', () => {
-  const jobs = [];
-  const cleared = [];
-  const pause = createResultsPause({ schedule: (callback, delay) => { jobs.push({ callback, delay }); return jobs.length; }, clear: id => cleared.push(id) });
-  let transitions = 0;
-  pause.start(() => transitions++);
-  assert.equal(transitions, 0);
-  assert.equal(jobs[0].delay, CHECKMATE_PAUSE_MS);
-  assert.equal(CHECKMATE_PAUSE_MS, 3000);
-  pause.cancel();
-  jobs[0].callback();
-  assert.equal(transitions, 0);
-  assert.deepEqual(cleared, [1]);
-  pause.start(() => transitions++);
-  pause.start(() => transitions++);
-  jobs[1].callback();
-  assert.equal(transitions, 0);
-  jobs[2].callback();
-  assert.equal(transitions, 1);
 });
 
 test('the finishing queen and checkmated king are identifiable on the final board', () => {
