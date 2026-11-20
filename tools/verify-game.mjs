@@ -115,8 +115,8 @@ test('restoring a match preserves the board, the repetition counts, and the rema
   assert.equal(restoreMatch(storage, openings), null);
 });
 
-test('all three bot difficulties find a mate in one', () => {
-  for (const difficulty of [1, 2, 3]) {
+test('all five bot difficulties find a mate in one', () => {
+  for (const difficulty of [1, 2, 3, 4, 5]) {
     assert.equal(askBot(['f3', 'e5', 'g4'], difficulty), 'd8h4');
   }
 });

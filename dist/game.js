@@ -1,3 +1,4 @@
+import { difficultyFor } from './difficulty.js';
 import { abilityBadges } from './ability-chess.js';
 const openings = [{ moves: '' }];
 import { automaticEnding, currentDrawClaim, drawClaims, opposite, replayOpening, resignation, restoreMatch, saveMatch } from './match.js';
@@ -47,7 +48,7 @@ function pieceImage(color, type) {
 }
 
 function nameFor(color) {
-  if (mode === 'bot') return color === firstColor ? 'You' : 'Bot';
+  if (mode === 'bot') return color === firstColor ? 'You' : difficultyFor(difficulty).name + ' Bot';
   return color === firstColor ? 'Player 1' : 'Player 2';
 }
 
@@ -200,7 +201,7 @@ function gameResult() {
 }
 
 function playerNames() {
-  return mode === 'bot' ? ['You', 'Bot'] : ['Player 1', 'Player 2'];
+  return mode === 'bot' ? ['You', difficultyFor(difficulty).name + ' Bot'] : ['Player 1', 'Player 2'];
 }
 
 function setStatus() {
@@ -226,6 +227,8 @@ function renderMenu() {
   byId('local-mode').setAttribute('aria-pressed', setupMode === 'local');
   byId('difficulty-row').hidden = setupMode !== 'bot';
   byId('difficulty').value = setupDifficulty;
+  byId('difficulty-description').hidden = setupMode !== 'bot';
+  byId('difficulty-description').textContent = difficultyFor(setupDifficulty).description;
   byId('color-label').textContent = setupMode === 'bot' ? 'Play as' : 'Player 1 color';
   byId('resume').hidden = !game;
   byId('resume').textContent = ending ? 'View results' : 'Resume game';
@@ -385,7 +388,7 @@ function requestBot() {
   const moves = game.moves({ verbose: true });
   const fallback = () => moves.find(move => move.promotion === 'q') ?? moves[0];
   try {
-    worker = new Worker(new URL('./bot.js', import.meta.url), { type: 'module' });
+    worker = new Worker(new URL('./bot.js?v=6', import.meta.url), { type: 'module' });
   } catch {
     play(fallback());
     return;
@@ -426,7 +429,7 @@ function askRestart() {
 
 byId('bot-mode').onclick = () => { setupMode = 'bot'; renderMenu(); };
 byId('local-mode').onclick = () => { setupMode = 'local'; renderMenu(); };
-byId('difficulty').onchange = event => { setupDifficulty = Number(event.target.value); };
+byId('difficulty').onchange = event => { setupDifficulty = difficultyFor(Number(event.target.value)).id; renderMenu(); };
 byId('shuffle').onclick = askRestart;
 byId('confirm-restart').onclick = () => {
   byId('restart-dialog').close();

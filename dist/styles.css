@@ -192,3 +192,5 @@ dialog select { max-width: 100%; }
 .ability-key img { width: 21px; height: 21px; padding: 1px; border: 1px solid #8e5d25; border-radius: 4px; background: #f5d49a; }
 .variant-note { margin-top: 6px; color: var(--muted); font-size: 11px; line-height: 1.5; }
 @media (max-width: 760px) { .square .ability-badges img { width: clamp(10px, 3vw, 17px); } }
+
+.difficulty-description { color: var(--muted); font-size: 13px; line-height: 1.5; text-align: left; min-height: 2.9em; }

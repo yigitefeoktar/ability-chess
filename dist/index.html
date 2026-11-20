@@ -7,8 +7,8 @@
     <meta name="description" content="Chess from the classic starting position, with movement abilities inherited on capture. Play against a bot or a friend.">
     <title>Ability Chess</title>
     <link rel="icon" href="./pieces/bN.png" type="image/png">
-    <link rel="stylesheet" href="./styles.css?v=5">
-    <script type="module" src="./game.js?v=5"></script>
+    <link rel="stylesheet" href="./styles.css?v=6">
+    <script type="module" src="./game.js?v=6"></script>
   </head>
   <body>
     <header class="site-header">
@@ -31,12 +31,15 @@
             <button id="local-mode" type="button" aria-pressed="false">Two Players</button>
           </div>
           <label class="difficulty" id="difficulty-row">Bot level
-            <select id="difficulty">
+            <select id="difficulty" aria-describedby="difficulty-description">
               <option value="1">Easy</option>
               <option value="2" selected>Medium</option>
               <option value="3">Hard</option>
+              <option value="4">Expert</option>
+              <option value="5">Impossible</option>
             </select>
           </label>
+          <p id="difficulty-description" class="difficulty-description"></p>
           <label class="difficulty"><span id="color-label">Play as</span>
             <select id="player-color">
               <option value="w">White</option>

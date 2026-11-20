@@ -1,3 +1,4 @@
+import { difficulties } from './difficulty.js';
 import { Chess } from './ability-chess.js';
 
 export const opposite = color => color === 'w' ? 'b' : 'w';
@@ -78,7 +79,7 @@ export function replayOpening(opening, moves = []) {
 export function restoreMatch(storage, openings) {
   const data = JSON.parse(storage.getItem('ability-chess-match-v1'));
   if (!data || !['bot', 'local'].includes(data.mode)
-      || ![1, 2, 3].includes(data.difficulty) || ![1, 2].includes(data.round)
+      || !difficulties.some(level => level.id === data.difficulty) || ![1, 2].includes(data.round)
       || !['w', 'b'].includes(data.firstColor) || !['w', 'b'].includes(data.orientation)
       || !Array.isArray(data.moves) || !Array.isArray(data.scores) || data.scores.length !== 2
       || !data.scores.every(score => [0, .5, 1, 1.5, 2].includes(score))) return null;
