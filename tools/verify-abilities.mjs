@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Chess, abilityBadges, movementAbilities } from '../dist/ability-chess.js';
-import { automaticEnding, drawClaims, positionCounts, replayOpening, restoreMatch, saveMatch } from '../dist/match.js';
+import { automaticEnding, drawClaims, positionCounts, replayOpening } from '../dist/match.js';
 
 const play = (game, moves) => moves.split(' ').forEach(move => game.move(move));
 const destinations = (game, square) => game.moves({ square, verbose: true }).map(move => move.to);
@@ -138,7 +138,7 @@ test('draw rules include abilities and enhanced minor pieces are not bare materi
   assert.equal(automaticEnding(game).reason, 'Fivefold repetition');
 });
 
-test('history, storage recovery, and bot coordinates preserve acquired abilities', () => {
+test('history and bot coordinates preserve acquired abilities', () => {
   const opening = { moves: '' };
   const game = replayOpening(opening);
   play(game, 'e4 d5 exd5 Qxd5 Nc3 Qe6+ Be2 Qxe2+ Ngxe2');
@@ -150,10 +150,5 @@ test('history, storage recovery, and bot coordinates preserve acquired abilities
   const replay = replayOpening(opening, coordinates);
   assert.equal(replay.positionKey(), hash);
   assert.deepEqual(replay.board(), game.board());
-  const data = new Map();
-  const storage = { getItem: key => data.get(key), setItem: (key, value) => data.set(key, value) };
-  saveMatch(storage, { opening, game, mode: 'local', difficulty: 2, round: 1, firstColor: 'w', orientation: 'w', scores: [0, 0], ending: null });
-  const restored = restoreMatch(storage, [opening]);
-  assert.deepEqual(restored.game.board(), game.board());
-  assert.deepEqual(positionCounts(restored.game), counts);
+  assert.deepEqual(positionCounts(replay), counts);
 });

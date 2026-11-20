@@ -7,8 +7,8 @@
     <meta name="description" content="Chess from the classic starting position, with movement abilities inherited on capture. Play against a bot or a friend.">
     <title>Ability Chess</title>
     <link rel="icon" href="./pieces/bN.png" type="image/png">
-    <link rel="stylesheet" href="./styles.css?v=5">
-    <script type="module" src="./game.js?v=5"></script>
+    <link rel="stylesheet" href="./styles.css?v=8">
+    <script type="module" src="./game.js?v=8"></script>
   </head>
   <body>
     <header class="site-header">
@@ -31,12 +31,15 @@
             <button id="local-mode" type="button" aria-pressed="false">Two Players</button>
           </div>
           <label class="difficulty" id="difficulty-row">Bot level
-            <select id="difficulty">
+            <select id="difficulty" aria-describedby="difficulty-description">
               <option value="1">Easy</option>
               <option value="2" selected>Medium</option>
               <option value="3">Hard</option>
+              <option value="4">Expert</option>
+              <option value="5">Impossible</option>
             </select>
           </label>
+          <p id="difficulty-description" class="difficulty-description"></p>
           <label class="difficulty"><span id="color-label">Play as</span>
             <select id="player-color">
               <option value="w">White</option>
@@ -45,6 +48,7 @@
           </label>
           <button class="primary" id="shuffle" type="button">Start game <span aria-hidden="true">→</span></button>
           <button class="secondary" id="resume" type="button" hidden>Resume game</button>
+          <p class="session-note">Each game starts fresh. Games are not saved.</p>
         </div>
       </section>
 
@@ -58,10 +62,9 @@
           <div class="player" id="bottom-player"></div>
         </div>
 
-        <aside class="card game-card" aria-label="Match and moves">
+        <aside class="card game-card" aria-label="Game and moves">
             <div class="game-heading">
-              <h2>Match</h2>
-              <span class="round" id="round"></span>
+              <h2>Game</h2>
             </div>
             <div class="status" id="status" role="status"></div>
             <div class="moves-heading"><span>Moves</span><span id="opening-length"></span></div>
@@ -71,12 +74,17 @@
             </div>
             <div class="ability-key"><img src="./pieces/wN.png" alt=""> Small pieces show inherited moves</div>
             <p class="variant-note">Capture to inherit movement. Kings stay kings.</p>
+            <div class="checkmate-explanation" id="checkmate-explanation" hidden>
+              <h3>Checkmate</h3>
+              <p id="checkmate-detail"></p>
+              <p id="checkmate-pause"></p>
+            </div>
             <div class="game-actions">
+              <button class="text-button" id="keep-reviewing" type="button" hidden>Keep reviewing</button>
               <button class="secondary" id="return-results" type="button" hidden>Back to results</button>
               <button class="text-button" id="claim" type="button" hidden>Claim draw</button>
               <button class="text-button resign" id="resign" type="button">Resign</button>
             </div>
-            <p class="score" id="score" hidden></p>
         </aside>
       </section>
 
@@ -87,14 +95,7 @@
           <p id="results-reason"></p>
         </div>
         <div class="card results-card">
-          <h2 id="match-outcome">Match score</h2>
-          <div class="results-score">
-            <div><span id="first-score"></span><span id="first-name"></span></div>
-            <span aria-hidden="true">–</span>
-            <div><span id="second-score"></span><span id="second-name"></span></div>
-          </div>
-          <button class="primary" id="rematch" type="button" hidden>Swap colors &amp; replay</button>
-          <button class="primary" id="new-opening" type="button" hidden>Start a new match</button>
+          <button class="primary" id="new-game" type="button">Play again</button>
           <div class="results-actions">
             <button class="text-button" id="review-board" type="button">Review board</button>
             <button class="text-button" id="results-menu" type="button">Main menu</button>
@@ -109,7 +110,7 @@
       <p>Pick a piece and then its destination. You can also drag a piece. Use the arrow keys to navigate the board and Enter to select a square.</p>
       <p>Small piece icons above a piece show its extra movement abilities. Only knight movement can jump over pieces. The king never gains abilities, and check and checkmate still apply.</p>
       <p>All other chess rules apply. Only original pawns can double-step, capture en passant, or promote. Inherited pawn movement is a forward step or a diagonal capture in the moving side’s direction. Castling is still only for kings and original rooks. Promoting a pawn keeps its inherited abilities.</p>
-      <p>Play the bot or share a board with a friend. A match has two games, with colors swapped for the second game.</p>
+      <p>Play the bot or share a board with a friend. Each game is independent. Games are not saved, so reloading starts fresh.</p>
       <p class="credits"><a href="./pieces/ATTRIBUTION.txt">Chess piece credits</a></p>
     </dialog>
     <dialog id="promotion-dialog" aria-labelledby="promotion-title">
@@ -122,9 +123,9 @@
       <button class="primary" id="confirm-resign" type="button">Resign game</button>
     </dialog>
     <dialog id="restart-dialog" aria-labelledby="restart-title">
-      <div class="dialog-head"><h2 id="restart-title">Start a new match?</h2><button class="icon-button" type="button" aria-label="Keep playing" data-close autofocus>×</button></div>
-      <p>Your current match and score will be cleared.</p>
-      <button class="primary" id="confirm-restart" type="button">Start new match</button>
+      <div class="dialog-head"><h2 id="restart-title">Start a new game?</h2><button class="icon-button" type="button" aria-label="Keep playing" data-close autofocus>×</button></div>
+      <p>This ends the current game and starts a fresh board.</p>
+      <button class="primary" id="confirm-restart" type="button">Start new game</button>
     </dialog>
     <dialog id="claim-dialog" aria-labelledby="claim-title">
       <div class="dialog-head"><h2 id="claim-title">Claim draw</h2><button class="icon-button" type="button" aria-label="Cancel draw claim" data-close>×</button></div>

@@ -74,26 +74,3 @@ export function replayOpening(opening, moves = []) {
   for (const move of moves) game.move(move);
   return game;
 }
-
-export function restoreMatch(storage, openings) {
-  const data = JSON.parse(storage.getItem('ability-chess-match-v1'));
-  if (!data || !['bot', 'local'].includes(data.mode)
-      || ![1, 2, 3].includes(data.difficulty) || ![1, 2].includes(data.round)
-      || !['w', 'b'].includes(data.firstColor) || !['w', 'b'].includes(data.orientation)
-      || !Array.isArray(data.moves) || !Array.isArray(data.scores) || data.scores.length !== 2
-      || !data.scores.every(score => [0, .5, 1, 1.5, 2].includes(score))) return null;
-  const opening = openings.find(candidate => candidate.moves === data.opening);
-  if (!opening) return null;
-  const game = replayOpening(opening, data.moves);
-  const ending = automaticEnding(game) ?? data.ending;
-  if (ending && (![null, 'w', 'b'].includes(ending.winner) || typeof ending.reason !== 'string')) return null;
-  return { ...data, opening, game, ending };
-}
-
-export function saveMatch(storage, match) {
-  const { opening, game, mode, difficulty, round, firstColor, orientation, scores, ending, screen } = match;
-  const moves = game.history({ verbose: true }).map(move => move.lan).slice(opening.moves.split(' ').filter(Boolean).length);
-  storage.setItem('ability-chess-match-v1', JSON.stringify({
-    opening: opening.moves, moves, mode, difficulty, round, firstColor, orientation, scores, ending, screen
-  }));
-}

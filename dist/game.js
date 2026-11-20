@@ -1,32 +1,33 @@
-import { abilityBadges } from './ability-chess.js';
-const openings = [{ moves: '' }];
-import { automaticEnding, currentDrawClaim, drawClaims, opposite, replayOpening, resignation, restoreMatch, saveMatch } from './match.js';
+import { createMoveAnimator, createResultsPause } from './motion.js';
+import { difficultyFor } from './difficulty.js';
+import { Chess, abilityBadges } from './ability-chess.js';
+import { pieceImage, updateSquarePiece } from './piece-view.js';
+import { automaticEnding, currentDrawClaim, drawClaims, opposite, resignation } from './match.js';
 
 const byId = id => document.getElementById(id);
 const board = byId('board');
 const colorControl = byId('player-color');
-const colorPreferenceKey = 'ability-chess-player-color';
 const files = 'abcdefgh';
 const ranks = '87654321';
 const pieceNames = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' };
 const colors = { w: 'White', b: 'Black' };
 let mode = 'bot';
 let difficulty = 2;
-let opening;
-let openingMoves;
 let game;
-let round;
 let firstColor;
 let selected;
 let focusSquare = 'e2';
 let ending;
-let scores;
 let worker;
 let promotion;
 let claims;
 let screen = 'menu';
 let setupMode = mode;
 let setupDifficulty = difficulty;
+let animating = false;
+let moveSequence = 0;
+let reviewPinned = false;
+const resultsPause = createResultsPause();
 
 const squares = new Map();
 for (const rank of ranks) {
@@ -39,15 +40,10 @@ for (const rank of ranks) {
   }
 }
 
-function pieceImage(color, type) {
-  const image = document.createElement('img');
-  image.src = './pieces/' + color + type.toUpperCase() + '.png';
-  image.alt = '';
-  return image;
-}
+const moveAnimator = createMoveAnimator(squares);
 
 function nameFor(color) {
-  if (mode === 'bot') return color === firstColor ? 'You' : 'Bot';
+  if (mode === 'bot') return color === firstColor ? 'You' : difficultyFor(difficulty).name + ' Bot';
   return color === firstColor ? 'Player 1' : 'Player 2';
 }
 
@@ -55,24 +51,19 @@ function botTurn() {
   return mode === 'bot' && game.turn() !== firstColor;
 }
 
-function startRound() {
+function newGame() {
   stopBot();
-  game = replayOpening(opening);
-  openingMoves = opening.moves.split(' ').filter(Boolean);
+  cancelPresentation();
+  reviewPinned = false;
+  mode = setupMode;
+  difficulty = setupDifficulty;
+  firstColor = colorControl.value;
+  game = new Chess();
   selected = null;
   ending = null;
   focusSquare = game.moves({ verbose: true })[0]?.from ?? 'e2';
   orderBoard();
   showScreen('game');
-}
-
-function newOpening() {
-  const candidates = openings.filter(candidate => candidate !== opening);
-  opening = candidates[Math.floor(Math.random() * candidates.length)] || openings[0];
-  round = 1;
-  firstColor = colorControl.value;
-  scores = [0, 0];
-  startRound();
 }
 
 function orderBoard() {
@@ -92,8 +83,9 @@ function renderBoard() {
   const legal = selected ? game.moves({ square: selected, verbose: true }) : [];
   const targets = new Map(legal.map(move => [move.to, move]));
   const history = game.history({ verbose: true });
-  const lastMove = history.length > openingMoves.length ? history.at(-1) : null;
+  const lastMove = history.at(-1);
   const inCheck = game.isCheck();
+  const attackers = matingAttackers();
   for (const [square, button] of squares) {
     const [file, rank] = square;
     const fileIndex = files.indexOf(file);
@@ -107,29 +99,22 @@ function renderBoard() {
     button.classList.toggle('target', Boolean(target));
     button.classList.toggle('capture', Boolean(target?.captured));
     button.classList.toggle('check', inCheck && piece?.type === 'k' && piece.color === game.turn());
+    button.classList.toggle('mating-attacker', attackers.includes(square));
     const badges = piece ? abilityBadges(piece) : [];
     const extraLabel = badges.length ? ', with ' + badges.map(type => pieceNames[type] + ' movement').join(', ') : '';
     button.setAttribute('aria-label', square + (piece ? ', ' + colors[piece.color] + ' ' + pieceNames[piece.type] + extraLabel : ', empty') + (target ? ', legal destination' : ''));
     button.tabIndex = focusSquare === square ? 0 : -1;
-    button.replaceChildren();
-    if (piece) {
-      const image = pieceImage(piece.color, piece.type);
-      image.draggable = !ending && !botTurn() && piece.color === game.turn();
-      button.append(image);
-      if (badges.length) {
-        const overlay = document.createElement('span');
-        overlay.className = 'ability-badges';
-        overlay.setAttribute('aria-hidden', 'true');
-        for (const type of badges) {
-          const badge = pieceImage(piece.color, type);
-          badge.draggable = false;
-          overlay.append(badge);
-        }
-        button.append(overlay);
-      }
+    updateSquarePiece(button, piece, {
+      draggable: !animating && !ending && !botTurn() && piece?.color === game.turn(),
+      deferAppearance: animating,
+    });
+    const edgeFile = file === (firstColor === 'w' ? 'a' : 'h');
+    const edgeRank = rank === (firstColor === 'w' ? '1' : '8');
+    for (const [type, visible, text] of [['rank', edgeFile, rank], ['file', edgeRank, file]]) {
+      const existing = button.querySelector('.coord.' + type);
+      if (visible && !existing) button.append(coord(text, type));
+      else if (!visible) existing?.remove();
     }
-    if (file === (firstColor === 'w' ? 'a' : 'h')) button.append(coord(rank, 'rank'));
-    if (rank === (firstColor === 'w' ? '1' : '8')) button.append(coord(file, 'file'));
   }
 }
 
@@ -180,14 +165,13 @@ function renderMoves() {
     for (const index of [i, i + 1]) {
       const cell = document.createElement('span');
       cell.textContent = history[index] ?? '';
-      if (index < openingMoves.length) cell.className = 'move-opening';
-      else if (index === history.length - 1) cell.className = 'move-latest';
+      if (index === history.length - 1) cell.className = 'move-latest';
       row.append(cell);
     }
     rows.append(row);
   }
   list.replaceChildren(rows);
-  list.scrollTop = history.length > openingMoves.length ? list.scrollHeight : 0;
+  list.scrollTop = history.length > 0 ? list.scrollHeight : 0;
   byId('opening-length').textContent = history.length ? Math.ceil(history.length / 2) + ' played' : 'Starting position';
 }
 
@@ -197,10 +181,6 @@ function winnerText(name) {
 
 function gameResult() {
   return ending.winner ? winnerText(nameFor(ending.winner)) : 'Draw';
-}
-
-function playerNames() {
-  return mode === 'bot' ? ['You', 'Bot'] : ['Player 1', 'Player 2'];
 }
 
 function setStatus() {
@@ -213,43 +193,35 @@ function setStatus() {
     : (mode === 'bot' ? 'Your move' : nameFor(turn) + ' to move') + (game.isCheck() ? ' · Check' : '');
 }
 
-function rememberMatch() {
-  try {
-    saveMatch(sessionStorage, { opening, game, mode, difficulty, round, firstColor, orientation: firstColor, scores, ending, screen });
-  } catch {
-    // The game remains playable when browser storage is unavailable.
-  }
-}
-
 function renderMenu() {
   byId('bot-mode').setAttribute('aria-pressed', setupMode === 'bot');
   byId('local-mode').setAttribute('aria-pressed', setupMode === 'local');
   byId('difficulty-row').hidden = setupMode !== 'bot';
   byId('difficulty').value = setupDifficulty;
+  byId('difficulty-description').hidden = setupMode !== 'bot';
+  byId('difficulty-description').textContent = difficultyFor(setupDifficulty).description;
   byId('color-label').textContent = setupMode === 'bot' ? 'Play as' : 'Player 1 color';
   byId('resume').hidden = !game;
   byId('resume').textContent = ending ? 'View results' : 'Resume game';
 }
 
 function renderResults() {
-  const [left, right] = playerNames();
   byId('results-title').textContent = gameResult();
-  byId('results-reason').textContent = 'Game ' + round + ' of 2 · ' + ending.reason;
+  byId('results-reason').textContent = ending.reason;
   byId('results-emblem').replaceChildren(...(ending.winner
     ? [pieceImage(ending.winner, 'k')]
     : [pieceImage('w', 'k'), pieceImage('b', 'k')]));
-  const matchLeader = scores[0] > scores[1] ? left : right;
-  byId('match-outcome').textContent = round === 1 ? 'Match score'
-    : scores[0] === scores[1] ? 'Match tied' : winnerText(matchLeader) + ' the match';
-  byId('first-name').textContent = left;
-  byId('second-name').textContent = right;
-  byId('first-score').textContent = scores[0];
-  byId('second-score').textContent = scores[1];
-  byId('rematch').hidden = round !== 1;
-  byId('new-opening').hidden = round !== 2;
+}
+
+function cancelPresentation() {
+  moveSequence++;
+  moveAnimator.cancel();
+  resultsPause.cancel();
+  animating = false;
 }
 
 function showScreen(next, moveFocus = true) {
+  if (next !== 'game') cancelPresentation();
   screen = next;
   if (next !== 'game') stopBot();
   for (const name of ['menu', 'game', 'results']) byId(name + '-screen').hidden = name !== next;
@@ -258,7 +230,6 @@ function showScreen(next, moveFocus = true) {
   if (next === 'menu') renderMenu();
   else if (next === 'results') renderResults();
   else render();
-  if (game && next !== 'game') rememberMatch();
   if (moveFocus) {
     window.scrollTo(0, 0);
     byId(next + '-title').focus({ preventScroll: true });
@@ -268,48 +239,79 @@ function showScreen(next, moveFocus = true) {
 
 function render() {
   const history = game.history({ verbose: true });
-  claims = !ending && !botTurn() ? drawClaims(game) : null;
+  claims = !animating && !ending && !botTurn() ? drawClaims(game) : null;
   renderBoard();
   renderPlayer(byId('top-player'), opposite(firstColor), history);
   renderPlayer(byId('bottom-player'), firstColor, history);
   renderMoves();
   setStatus();
-  byId('round').textContent = 'Game ' + round + ' of 2';
   byId('resign').hidden = Boolean(ending);
+  byId('resign').disabled = animating;
   byId('claim').hidden = !(claims?.current || claims?.byMove.length);
   byId('return-results').hidden = !ending;
-  byId('score').hidden = round === 1 && !ending;
-  const [left, right] = playerNames();
-  byId('score').textContent = `${left} ${scores[0]} · ${scores[1]} ${right}`;
-  rememberMatch();
+  byId('return-results').textContent = ending?.reason === 'Checkmate' ? 'View results' : 'Back to results';
+  byId('keep-reviewing').hidden = ending?.reason !== 'Checkmate' || reviewPinned;
+  renderCheckmate();
 }
 
-function finish(result) {
+function matingAttackers() {
+  if (ending?.reason !== 'Checkmate') return [];
+  const king = game.board().flat().find(piece => piece?.type === 'k' && piece.color === game.turn());
+  return king ? game.attackers(king.square, opposite(king.color)) : [];
+}
+
+function renderCheckmate() {
+  const panel = byId('checkmate-explanation');
+  panel.hidden = ending?.reason !== 'Checkmate';
+  if (panel.hidden) return;
+  const attackers = matingAttackers().map(square => pieceNames[game.get(square).type] + ' on ' + square);
+  byId('checkmate-detail').textContent = attackers.length
+    ? 'The ' + attackers.join(' and ') + ' ' + (attackers.length > 1 ? 'check' : 'checks') + ' the king. No legal move can remove the check.'
+    : 'The king is in check, and no legal move can remove the check.';
+  byId('checkmate-pause').textContent = reviewPinned
+    ? 'Take your time. Choose View results when you’re ready.'
+    : 'Results will appear shortly. Choose Keep reviewing to stay here.';
+}
+
+function finish(result, onBoard = false) {
+  if (ending) return;
   ending = result;
   selected = null;
-  const { winner } = result;
-  if (winner) scores[winner === firstColor ? 0 : 1]++;
-  else {
-    scores[0] += .5;
-    scores[1] += .5;
-  }
+  stopBot();
   if (byId('resign-dialog').open) byId('resign-dialog').close();
-  showScreen('results');
+  if (onBoard) render();
+  else showScreen('results');
 }
 
-function play(move) {
-  game.move(move);
+async function play(move) {
+  if (animating || ending || screen !== 'game') return;
+  const before = moveAnimator.snapshot();
+  const moved = game.move(move);
+  const sequence = ++moveSequence;
   selected = null;
+  animating = true;
+  moveAnimator.place(moved, before);
   const automatic = automaticEnding(game);
+  if (automatic) finish(automatic, true);
+  else render();
+  try {
+    await moveAnimator.play(moved, before);
+  } finally {
+    if (sequence === moveSequence) animating = false;
+  }
+  if (sequence !== moveSequence || screen !== 'game') return;
+  render();
   if (automatic) {
-    finish(automatic);
+    if (automatic.reason === 'Checkmate') {
+      if (!reviewPinned) resultsPause.start(() => showScreen('results'));
+    } else showScreen('results');
     return;
   }
-  render();
   requestBot();
 }
 
 function chooseMove(from, to) {
+  if (animating || ending || screen !== 'game') return false;
   const choices = game.moves({ square: from, verbose: true }).filter(move => move.to === to);
   if (!choices.length) return false;
   if (choices.length === 1) {
@@ -332,7 +334,7 @@ function chooseMove(from, to) {
 
 board.addEventListener('click', event => {
   const square = event.target.closest('.square')?.dataset.square;
-  if (!square || ending || botTurn()) return;
+  if (!square || animating || ending || botTurn()) return;
   focusSquare = square;
   if (selected && selected !== square && chooseMove(selected, square)) return;
   selected = selected !== square && game.get(square)?.color === game.turn() ? square : null;
@@ -360,17 +362,17 @@ board.addEventListener('focusin', event => {
 
 board.addEventListener('dragstart', event => {
   const square = event.target.closest('.square')?.dataset.square;
-  if (!square || !event.target.draggable) return;
+  if (!square || animating || ending || !event.target.draggable) return;
   event.dataTransfer.effectAllowed = 'move';
   event.dataTransfer.setData('text/plain', square);
 });
 board.addEventListener('dragover', event => {
-  if (!ending && !botTurn() && event.target.closest('.square')) event.preventDefault();
+  if (!animating && !ending && !botTurn() && event.target.closest('.square')) event.preventDefault();
 });
 board.addEventListener('drop', event => {
   const to = event.target.closest('.square')?.dataset.square;
   const from = event.dataTransfer.getData('text/plain');
-  if (!to || !squares.has(from) || ending || botTurn()) return;
+  if (!to || !squares.has(from) || animating || ending || botTurn()) return;
   event.preventDefault();
   chooseMove(from, to);
 });
@@ -381,11 +383,11 @@ function stopBot() {
 }
 
 function requestBot() {
-  if (screen !== 'game' || worker || ending || !botTurn()) return;
+  if (screen !== 'game' || animating || worker || ending || !botTurn()) return;
   const moves = game.moves({ verbose: true });
   const fallback = () => moves.find(move => move.promotion === 'q') ?? moves[0];
   try {
-    worker = new Worker(new URL('./bot.js', import.meta.url), { type: 'module' });
+    worker = new Worker(new URL('./bot.js?v=6', import.meta.url), { type: 'module' });
   } catch {
     play(fallback());
     return;
@@ -407,50 +409,31 @@ function requestBot() {
   worker.postMessage({ moves: game.history({ verbose: true }).map(move => move.lan), difficulty });
 }
 
-function startFromMenu() {
-  mode = setupMode;
-  difficulty = setupDifficulty;
-  newOpening();
-}
-
 function askRestart() {
-  if (!game || ending) {
-    startFromMenu();
-    return;
-  }
-  const humanMoved = game.history({ verbose: true }).slice(openingMoves.length)
-    .some(move => mode === 'local' || move.color === firstColor);
-  if (round === 2 || humanMoved) byId('restart-dialog').showModal();
-  else startFromMenu();
+  if (game && !ending && game.history().length) byId('restart-dialog').showModal();
+  else newGame();
 }
 
 byId('bot-mode').onclick = () => { setupMode = 'bot'; renderMenu(); };
 byId('local-mode').onclick = () => { setupMode = 'local'; renderMenu(); };
-byId('difficulty').onchange = event => { setupDifficulty = Number(event.target.value); };
+byId('difficulty').onchange = event => { setupDifficulty = difficultyFor(Number(event.target.value)).id; renderMenu(); };
 byId('shuffle').onclick = askRestart;
 byId('confirm-restart').onclick = () => {
   byId('restart-dialog').close();
-  startFromMenu();
+  newGame();
 };
 byId('menu-open').onclick = () => showScreen('menu');
 byId('resume').onclick = () => showScreen(ending ? 'results' : 'game');
 byId('results-menu').onclick = () => showScreen('menu');
-byId('review-board').onclick = () => showScreen('game');
+byId('review-board').onclick = () => { reviewPinned = true; showScreen('game'); };
 byId('return-results').onclick = () => showScreen('results');
-byId('new-opening').onclick = newOpening;
-byId('rematch').onclick = () => {
-  if (!ending || round !== 1) return;
-  round = 2;
-  firstColor = opposite(firstColor);
-  startRound();
+byId('keep-reviewing').onclick = () => {
+  reviewPinned = true;
+  resultsPause.cancel();
+  renderCheckmate();
+  byId('keep-reviewing').hidden = true;
 };
-colorControl.onchange = () => {
-  try {
-    sessionStorage.setItem(colorPreferenceKey, colorControl.value);
-  } catch {
-    // The option still works for the current page.
-  }
-};
+byId('new-game').onclick = newGame;
 byId('rules-open').onclick = () => byId('rules-dialog').showModal();
 for (const button of document.querySelectorAll('[data-close]')) {
   button.onclick = () => button.closest('dialog').close();
@@ -503,25 +486,12 @@ byId('confirm-claim').onclick = () => {
   finish({ winner: null, reason });
 };
 
-let restored;
+// Discard snapshots from older versions. Games now live only in memory.
 try {
-  const color = sessionStorage.getItem(colorPreferenceKey)
-    ?? (sessionStorage.getItem('opening-shuffle-flip-board') === 'true' ? 'b' : 'w');
-  colorControl.value = color === 'b' ? 'b' : 'w';
-  restored = restoreMatch(sessionStorage, openings);
+  for (const key of ['ability-chess-match-v1', 'opening-shuffle-match-v1', 'ability-chess-player-color', 'opening-shuffle-player-color', 'opening-shuffle-flip-board']) {
+    sessionStorage.removeItem(key);
+  }
 } catch {
-  // Ignore a stale or inaccessible snapshot.
+  // Storage access is optional; it is never used to save or restore a game.
 }
-if (restored) {
-  ({ opening, game, mode, difficulty, round, firstColor, scores, ending } = restored);
-  setupMode = mode;
-  setupDifficulty = difficulty;
-  openingMoves = opening.moves.split(' ').filter(Boolean);
-  focusSquare = game.moves({ verbose: true })[0]?.from ?? 'e2';
-  orderBoard();
-  const initialScreen = restored.screen === 'menu' ? 'menu'
-    : ending && restored.screen !== 'game' ? 'results' : 'game';
-  showScreen(initialScreen, false);
-} else {
-  showScreen('menu', false);
-}
+showScreen('menu', false);
