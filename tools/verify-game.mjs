@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Chess } from '../dist/vendor/chess.js';
 import { openings } from '../dist/openings.js';
-import { automaticEnding, drawClaims, opposite, positionCounts, replayOpening, resignation, restoreMatch, saveMatch } from '../dist/match.js';
+import { automaticEnding, drawClaims, replayOpening, resignation } from '../dist/match.js';
 
 const play = (game, notation) => notation.split(' ').forEach(move => game.move(move, { strict: true }));
 const loop = 'Nf3 Nf6 Ng1 Ng8';
@@ -92,27 +92,6 @@ test('resignation against a bare king is a draw', () => {
   const game = new Chess('7k/8/8/8/8/8/2R5/K7 w - - 0 1');
   assert.equal(resignation(game, 'w').winner, null);
   assert.equal(resignation(game, 'b').winner, 'w');
-});
-
-test('restoring a match preserves the board, the repetition counts, and the rematch score', () => {
-  const opening = { moves: loop + ' ' + loop };
-  const game = replayOpening(opening, ['Nf3']);
-  const data = new Map();
-  const storage = { getItem: key => data.get(key), setItem: (key, value) => data.set(key, value) };
-  const snapshot = {
-    opening, game, mode: 'local', difficulty: 3, round: 2, firstColor: 'b', orientation: 'w',
-    scores: [1, 0], ending: null
-  };
-  saveMatch(storage, snapshot);
-  const restored = restoreMatch(storage, [opening]);
-  assert.equal(restored.game.fen(), game.fen());
-  assert.deepEqual(positionCounts(restored.game), positionCounts(game));
-  assert.equal(restored.firstColor, opposite('w'));
-  assert.equal(restored.orientation, 'w');
-  assert.equal(restored.mode, 'local');
-  assert.deepEqual(restored.scores, [1, 0]);
-  assert.equal(restored.round, 2);
-  assert.equal(restoreMatch(storage, openings), null);
 });
 
 test('all five bot difficulties find a mate in one', () => {

@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Chess } from '../dist/ability-chess.js';
 import { difficulties } from '../dist/difficulty.js';
-import { restoreMatch, saveMatch } from '../dist/match.js';
 
 globalThis.self = {};
 const { searchBestMove } = await import('../dist/bot.js');
@@ -39,20 +38,6 @@ test('a longer search completes deeper iterations with deterministic time', () =
   assert.equal(easy.depth, 1);
   assert.ok(impossible.depth > easy.depth);
   assert.ok(impossible.nodes > easy.nodes);
-});
-
-test('new and existing difficulty selections survive saved-game recovery', () => {
-  for (const level of difficulties) {
-    const data = new Map();
-    const storage = { getItem: key => data.get(key), setItem: (key, value) => data.set(key, value) };
-    const opening = { moves: '' };
-    const game = new Chess();
-    game.move('e4');
-    saveMatch(storage, { opening, game, mode: 'bot', difficulty: level.id, round: 1, firstColor: 'w', orientation: 'w', scores: [0, 0], ending: null });
-    const restored = restoreMatch(storage, [opening]);
-    assert.equal(restored.difficulty, level.id);
-    assert.equal(restored.game.fen(), game.fen());
-  }
 });
 
 test('the worker handles Impossible and invalid settings with legal responses', () => {

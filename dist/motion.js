@@ -17,21 +17,32 @@ export function createMoveAnimator(squares, reducedMotion = () => matchMedia('(p
   const active = new Set();
   function snapshot() {
     return new Map([...squares].map(([square, button]) => [square, {
-      piece: button.querySelector('.piece')?.cloneNode(true),
+      piece: button.querySelector('.piece'),
       rect: button.getBoundingClientRect(),
     }]));
   }
   function cancel() {
     for (const animation of active) animation.cancel();
   }
+  function place(move, before) {
+    // Relocate the actual elements before rendering. No image clones, hidden
+    // replacements, or full-board rebuilds are needed for an animated move.
+    before.get(capturedSquare(move))?.piece?.remove();
+    for (const { from, to } of motionPaths(move)) {
+      const piece = before.get(from)?.piece;
+      if (piece) squares.get(to).append(piece);
+    }
+  }
   async function play(move, before) {
     if (reducedMotion()) return;
     const cleanup = [];
     const pending = [];
+    const started = [];
     function animate(element, frames, options) {
       if (!element.animate) return;
       const animation = element.animate(frames, options);
       active.add(animation);
+      started.push(animation);
       pending.push(animation.finished.catch(() => {}).finally(() => active.delete(animation)));
     }
     try {
@@ -46,22 +57,16 @@ export function createMoveAnimator(squares, reducedMotion = () => matchMedia('(p
       for (const { from, to } of motionPaths(move)) {
         const source = before.get(from);
         const target = squares.get(to);
-        const finalPiece = target.querySelector('.piece:not(.motion-victim)');
-        if (!source?.piece || !finalPiece) continue;
+        const visual = source?.piece;
+        if (!visual || visual.parentNode !== target) continue;
         const rect = target.getBoundingClientRect();
-        const ghost = source.piece;
-        ghost.setAttribute('aria-hidden', 'true');
-        ghost.classList.add('motion-piece');
-        ghost.querySelectorAll('img').forEach(image => { image.draggable = false; });
-        finalPiece.style.visibility = 'hidden';
+        visual.classList.add('motion-piece');
         target.classList.add('moving');
-        target.append(ghost);
         cleanup.push(() => {
-          ghost.remove();
-          finalPiece.style.visibility = '';
+          visual.classList.remove('motion-piece');
           target.classList.remove('moving');
         });
-        animate(ghost, [
+        animate(visual, [
           { transform: `translate(${source.rect.left - rect.left}px, ${source.rect.top - rect.top}px)` },
           { transform: 'translate(0, 0)' },
         ], { duration: 340, easing: 'cubic-bezier(.25,.65,.3,1)', fill: 'both' });
@@ -69,9 +74,11 @@ export function createMoveAnimator(squares, reducedMotion = () => matchMedia('(p
       await Promise.all(pending);
     } finally {
       for (const finish of cleanup) finish();
+      // Keep a faded capture invisible until the sliding piece also finishes.
+      for (const animation of started) animation.cancel();
     }
   }
-  return { snapshot, play, cancel };
+  return { snapshot, place, play, cancel };
 }
 
 // One cancellable results transition; leaving the board or choosing to keep
