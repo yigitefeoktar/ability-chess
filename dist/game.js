@@ -1,3 +1,4 @@
+import { createMoveAnimator, createResultsPause } from './motion.js';
 import { difficultyFor } from './difficulty.js';
 import { abilityBadges } from './ability-chess.js';
 const openings = [{ moves: '' }];
@@ -28,6 +29,10 @@ let claims;
 let screen = 'menu';
 let setupMode = mode;
 let setupDifficulty = difficulty;
+let animating = false;
+let moveSequence = 0;
+let reviewPinned = false;
+const resultsPause = createResultsPause();
 
 const squares = new Map();
 for (const rank of ranks) {
@@ -39,6 +44,8 @@ for (const rank of ranks) {
     squares.set(square, button);
   }
 }
+
+const moveAnimator = createMoveAnimator(squares);
 
 function pieceImage(color, type) {
   const image = document.createElement('img');
@@ -58,6 +65,8 @@ function botTurn() {
 
 function startRound() {
   stopBot();
+  cancelPresentation();
+  reviewPinned = false;
   game = replayOpening(opening);
   openingMoves = opening.moves.split(' ').filter(Boolean);
   selected = null;
@@ -95,6 +104,7 @@ function renderBoard() {
   const history = game.history({ verbose: true });
   const lastMove = history.length > openingMoves.length ? history.at(-1) : null;
   const inCheck = game.isCheck();
+  const attackers = matingAttackers();
   for (const [square, button] of squares) {
     const [file, rank] = square;
     const fileIndex = files.indexOf(file);
@@ -108,6 +118,7 @@ function renderBoard() {
     button.classList.toggle('target', Boolean(target));
     button.classList.toggle('capture', Boolean(target?.captured));
     button.classList.toggle('check', inCheck && piece?.type === 'k' && piece.color === game.turn());
+    button.classList.toggle('mating-attacker', attackers.includes(square));
     const badges = piece ? abilityBadges(piece) : [];
     const extraLabel = badges.length ? ', with ' + badges.map(type => pieceNames[type] + ' movement').join(', ') : '';
     button.setAttribute('aria-label', square + (piece ? ', ' + colors[piece.color] + ' ' + pieceNames[piece.type] + extraLabel : ', empty') + (target ? ', legal destination' : ''));
@@ -115,8 +126,11 @@ function renderBoard() {
     button.replaceChildren();
     if (piece) {
       const image = pieceImage(piece.color, piece.type);
-      image.draggable = !ending && !botTurn() && piece.color === game.turn();
-      button.append(image);
+      image.draggable = !animating && !ending && !botTurn() && piece.color === game.turn();
+      const visual = document.createElement('span');
+      visual.className = 'piece';
+      visual.append(image);
+      button.append(visual);
       if (badges.length) {
         const overlay = document.createElement('span');
         overlay.className = 'ability-badges';
@@ -126,7 +140,7 @@ function renderBoard() {
           badge.draggable = false;
           overlay.append(badge);
         }
-        button.append(overlay);
+        visual.append(overlay);
       }
     }
     if (file === (firstColor === 'w' ? 'a' : 'h')) button.append(coord(rank, 'rank'));
@@ -252,7 +266,15 @@ function renderResults() {
   byId('new-opening').hidden = round !== 2;
 }
 
+function cancelPresentation() {
+  moveSequence++;
+  moveAnimator.cancel();
+  resultsPause.cancel();
+  animating = false;
+}
+
 function showScreen(next, moveFocus = true) {
+  if (next !== 'game') cancelPresentation();
   screen = next;
   if (next !== 'game') stopBot();
   for (const name of ['menu', 'game', 'results']) byId(name + '-screen').hidden = name !== next;
@@ -271,7 +293,7 @@ function showScreen(next, moveFocus = true) {
 
 function render() {
   const history = game.history({ verbose: true });
-  claims = !ending && !botTurn() ? drawClaims(game) : null;
+  claims = !animating && !ending && !botTurn() ? drawClaims(game) : null;
   renderBoard();
   renderPlayer(byId('top-player'), opposite(firstColor), history);
   renderPlayer(byId('bottom-player'), firstColor, history);
@@ -279,17 +301,42 @@ function render() {
   setStatus();
   byId('round').textContent = 'Game ' + round + ' of 2';
   byId('resign').hidden = Boolean(ending);
+  byId('resign').disabled = animating;
   byId('claim').hidden = !(claims?.current || claims?.byMove.length);
   byId('return-results').hidden = !ending;
+  byId('return-results').textContent = ending?.reason === 'Checkmate' ? 'View results' : 'Back to results';
+  byId('keep-reviewing').hidden = ending?.reason !== 'Checkmate' || reviewPinned;
+  renderCheckmate();
   byId('score').hidden = round === 1 && !ending;
   const [left, right] = playerNames();
   byId('score').textContent = `${left} ${scores[0]} · ${scores[1]} ${right}`;
   rememberMatch();
 }
 
-function finish(result) {
+function matingAttackers() {
+  if (ending?.reason !== 'Checkmate') return [];
+  const king = game.board().flat().find(piece => piece?.type === 'k' && piece.color === game.turn());
+  return king ? game.attackers(king.square, opposite(king.color)) : [];
+}
+
+function renderCheckmate() {
+  const panel = byId('checkmate-explanation');
+  panel.hidden = ending?.reason !== 'Checkmate';
+  if (panel.hidden) return;
+  const attackers = matingAttackers().map(square => pieceNames[game.get(square).type] + ' on ' + square);
+  byId('checkmate-detail').textContent = attackers.length
+    ? 'The ' + attackers.join(' and ') + ' ' + (attackers.length > 1 ? 'check' : 'checks') + ' the king. No legal move can remove the check.'
+    : 'The king is in check, and no legal move can remove the check.';
+  byId('checkmate-pause').textContent = reviewPinned
+    ? 'Take your time. Choose View results when you’re ready.'
+    : 'Results will appear shortly. Choose Keep reviewing to stay here.';
+}
+
+function finish(result, onBoard = false) {
+  if (ending) return;
   ending = result;
   selected = null;
+  stopBot();
   const { winner } = result;
   if (winner) scores[winner === firstColor ? 0 : 1]++;
   else {
@@ -297,22 +344,38 @@ function finish(result) {
     scores[1] += .5;
   }
   if (byId('resign-dialog').open) byId('resign-dialog').close();
-  showScreen('results');
+  if (onBoard) render();
+  else showScreen('results');
 }
 
-function play(move) {
-  game.move(move);
+async function play(move) {
+  if (animating || ending || screen !== 'game') return;
+  const before = moveAnimator.snapshot();
+  const moved = game.move(move);
+  const sequence = ++moveSequence;
   selected = null;
+  animating = true;
   const automatic = automaticEnding(game);
+  if (automatic) finish(automatic, true);
+  else render();
+  try {
+    await moveAnimator.play(moved, before);
+  } finally {
+    if (sequence === moveSequence) animating = false;
+  }
+  if (sequence !== moveSequence || screen !== 'game') return;
+  render();
   if (automatic) {
-    finish(automatic);
+    if (automatic.reason === 'Checkmate') {
+      if (!reviewPinned) resultsPause.start(() => showScreen('results'));
+    } else showScreen('results');
     return;
   }
-  render();
   requestBot();
 }
 
 function chooseMove(from, to) {
+  if (animating || ending || screen !== 'game') return false;
   const choices = game.moves({ square: from, verbose: true }).filter(move => move.to === to);
   if (!choices.length) return false;
   if (choices.length === 1) {
@@ -335,7 +398,7 @@ function chooseMove(from, to) {
 
 board.addEventListener('click', event => {
   const square = event.target.closest('.square')?.dataset.square;
-  if (!square || ending || botTurn()) return;
+  if (!square || animating || ending || botTurn()) return;
   focusSquare = square;
   if (selected && selected !== square && chooseMove(selected, square)) return;
   selected = selected !== square && game.get(square)?.color === game.turn() ? square : null;
@@ -363,17 +426,17 @@ board.addEventListener('focusin', event => {
 
 board.addEventListener('dragstart', event => {
   const square = event.target.closest('.square')?.dataset.square;
-  if (!square || !event.target.draggable) return;
+  if (!square || animating || ending || !event.target.draggable) return;
   event.dataTransfer.effectAllowed = 'move';
   event.dataTransfer.setData('text/plain', square);
 });
 board.addEventListener('dragover', event => {
-  if (!ending && !botTurn() && event.target.closest('.square')) event.preventDefault();
+  if (!animating && !ending && !botTurn() && event.target.closest('.square')) event.preventDefault();
 });
 board.addEventListener('drop', event => {
   const to = event.target.closest('.square')?.dataset.square;
   const from = event.dataTransfer.getData('text/plain');
-  if (!to || !squares.has(from) || ending || botTurn()) return;
+  if (!to || !squares.has(from) || animating || ending || botTurn()) return;
   event.preventDefault();
   chooseMove(from, to);
 });
@@ -384,7 +447,7 @@ function stopBot() {
 }
 
 function requestBot() {
-  if (screen !== 'game' || worker || ending || !botTurn()) return;
+  if (screen !== 'game' || animating || worker || ending || !botTurn()) return;
   const moves = game.moves({ verbose: true });
   const fallback = () => moves.find(move => move.promotion === 'q') ?? moves[0];
   try {
@@ -438,8 +501,14 @@ byId('confirm-restart').onclick = () => {
 byId('menu-open').onclick = () => showScreen('menu');
 byId('resume').onclick = () => showScreen(ending ? 'results' : 'game');
 byId('results-menu').onclick = () => showScreen('menu');
-byId('review-board').onclick = () => showScreen('game');
+byId('review-board').onclick = () => { reviewPinned = true; showScreen('game'); };
 byId('return-results').onclick = () => showScreen('results');
+byId('keep-reviewing').onclick = () => {
+  reviewPinned = true;
+  resultsPause.cancel();
+  renderCheckmate();
+  byId('keep-reviewing').hidden = true;
+};
 byId('new-opening').onclick = newOpening;
 byId('rematch').onclick = () => {
   if (!ending || round !== 1) return;
@@ -519,6 +588,7 @@ if (restored) {
   ({ opening, game, mode, difficulty, round, firstColor, scores, ending } = restored);
   setupMode = mode;
   setupDifficulty = difficulty;
+  reviewPinned = Boolean(ending);
   openingMoves = opening.moves.split(' ').filter(Boolean);
   focusSquare = game.moves({ verbose: true })[0]?.from ?? 'e2';
   orderBoard();

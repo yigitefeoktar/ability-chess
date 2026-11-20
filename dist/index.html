@@ -7,8 +7,8 @@
     <meta name="description" content="Chess from the classic starting position, with movement abilities inherited on capture. Play against a bot or a friend.">
     <title>Ability Chess</title>
     <link rel="icon" href="./pieces/bN.png" type="image/png">
-    <link rel="stylesheet" href="./styles.css?v=6">
-    <script type="module" src="./game.js?v=6"></script>
+    <link rel="stylesheet" href="./styles.css?v=7">
+    <script type="module" src="./game.js?v=7"></script>
   </head>
   <body>
     <header class="site-header">
@@ -74,7 +74,13 @@
             </div>
             <div class="ability-key"><img src="./pieces/wN.png" alt=""> Small pieces show inherited moves</div>
             <p class="variant-note">Capture to inherit movement. Kings stay kings.</p>
+            <div class="checkmate-explanation" id="checkmate-explanation" hidden>
+              <h3>Checkmate</h3>
+              <p id="checkmate-detail"></p>
+              <p id="checkmate-pause"></p>
+            </div>
             <div class="game-actions">
+              <button class="text-button" id="keep-reviewing" type="button" hidden>Keep reviewing</button>
               <button class="secondary" id="return-results" type="button" hidden>Back to results</button>
               <button class="text-button" id="claim" type="button" hidden>Claim draw</button>
               <button class="text-button resign" id="resign" type="button">Resign</button>

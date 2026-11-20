@@ -10,8 +10,10 @@ Play against one of five bot levels (Easy, Medium, Hard, Expert, and Impossible)
 
 The app is buildless static HTML, CSS, and JavaScript in `dist/`. Serve with `python -m http.server 8765 --bind 127.0.0.1 --directory dist`, then open http://127.0.0.1:8765.
 
-Run `node --test tools/verify-game.mjs tools/verify-abilities.mjs tools/verify-bot.mjs` to check the original chess rules, inherited movement, special moves, bot behavior, and recovery. The original opening pool and generator are retained as base-project resources; the game always starts from the normal starting position.
+Run `node --test tools/verify-game.mjs tools/verify-abilities.mjs tools/verify-bot.mjs tools/verify-motion.mjs` to check the original chess rules, inherited movement, special moves, bot behavior, and recovery. The original opening pool and generator are retained as base-project resources; the game always starts from the normal starting position.
 
 `dist/ability-chess.js` extends the vendored chess.js engine without changing vendor code. Piece and engine licenses remain alongside their respective assets.
 
 AI levels use increasing depth, time budgets, and capture-sequence search. Impossible uses the strongest search, with up to six seconds per move in a Web Worker; it is a difficulty name, not a guarantee of unbeatable play. The engine evaluates inherited movement and uses move ordering without changing the game rules.
+
+Pieces slide between squares on player and bot moves, including both pieces when castling. Captures fade out, and promotion or inherited ability icons appear on arrival. The app respects reduced-motion preferences. Checkmate leaves the final board visible for three seconds after the move, highlighting the king and checking pieces with a short explanation. Choose Keep reviewing to stay on the board, or View results to continue.
