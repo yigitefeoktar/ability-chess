@@ -1,0 +1,16 @@
+{
+  "source": {
+    "provider": "github",
+    "repository": "yigitefeoktar/ability-chess",
+    "branch": "main"
+  },
+  "frontend": {
+    "provider": "vercel",
+    "project": "ability-chess",
+    "team": "yigits-projects-96bf526b",
+    "productionUrl": "https://ability-chess.vercel.app/",
+    "buildCommand": "",
+    "outputDirectory": "dist"
+  },
+  "backend": null
+}

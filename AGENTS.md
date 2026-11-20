@@ -1,8 +1,12 @@
-# Opening Shuffle deployment
+# Ability Chess deployment
 
-- Use `main` on `origin` at https://github.com/yigitefeoktar/opening-shuffle.git for releases. Fetch and reconcile upstream changes before pushing.
-- Vercel project `opening-shuffle` serves https://opening-shuffle.vercel.app/ from GitHub `main`. `vercel.json` publishes the checked-in static files in `dist/`. There is no install or build command.
-- Run `node --test tools/verify-game.mjs` before pushing. After `git push origin main`, verify that Vercel reports a ready production deployment for the pushed SHA. Open the production URL and make a move to verify the frontend and bot worker.
-- To recover a bad release, use Vercel Instant Rollback to restore a known-good production deployment, revert the faulty commit on `main`, and deploy the corrected commit. Promote the corrected deployment if automatic alias assignment is paused after rollback.
-- Multiplayer is local to one device. No backend is enabled. Keep production on the free Vercel plan.
-- Google Cloud billing and the old automatic game triggers are disabled. Use GitHub and Vercel for releases.
+- Source of truth: `https://github.com/yigitefeoktar/ability-chess.git`, branch `main`, remote `origin`. This is independent of Opening Shuffle; never push Ability Chess changes to that game's repository or Vercel project.
+- `sites-source` retains the original private Sites source as historical provenance. The migrated published source was `f32326b8a19618d1666398863b07b7c2ee89303e`. Do not push to Sites during GitHub/Vercel releases.
+- Deployment manifest: `deployment.json`. Vercel project `ability-chess` under `yigits-projects-96bf526b`; stable public production URL: https://ability-chess.vercel.app/.
+- Buildless frontend: `vercel.json` publishes checked-in static HTML, CSS, JavaScript, pieces and fonts in `dist/`. No install/build command is required.
+- Before release inspect Git status/remotes, preserve unrelated work, fetch/reconcile `origin/main`, run `node --test tools/verify-game.mjs tools/verify-abilities.mjs` and `git diff --check`.
+- Commit only task files to `main` and push without force. Main pushes trigger Vercel. Verify the exact main SHA's successful Vercel deployment, public stable URL, a capture that inherits movement, bot worker, reload recovery and mobile layout.
+- Do not start a local development server unless requested; a bounded production smoke test is appropriate.
+- Backend is explicitly disabled (`backend: null`). Two-player mode is local to one device. No backend install/start/exposure, Windows tasks, ports or tunnels.
+- Free services only. Google Cloud billing and automatic game triggers remain disabled. Preserve historical resources and never reuse another game's infrastructure.
+- Recovery: restore a verified prior Vercel deployment if needed, then fix/revert only the faulty task on `main` and push normally. If Instant Rollback pauses domain assignment, promote the corrected production deployment.
